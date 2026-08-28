@@ -365,10 +365,22 @@ export function getTaxRates(): Promise<TaxRatesV1> {
 
 // ───────────────────────────── auth ─────────────────────────────
 
-export function sendLoginCode(phone: string): Promise<SendCodeResponse> {
-  return call<SendCodeResponse>("POST", `${API_PREFIX}/auth/send-code`, { json: { phone } }, {
-    unauthorizedMeans: "customer",
-  });
+/**
+ * `membersOnly` makes the upstream refuse an unknown phone BEFORE sending, with
+ * 403 `not_a_customer`. Only a members-only storefront passes it; omitted, the
+ * upstream behaves exactly as it always has, which is what keeps every other
+ * storefront unaffected.
+ */
+export function sendLoginCode(
+  phone: string,
+  opts: { membersOnly?: boolean } = {},
+): Promise<SendCodeResponse> {
+  return call<SendCodeResponse>(
+    "POST",
+    `${API_PREFIX}/auth/send-code`,
+    { json: opts.membersOnly ? { phone, membersOnly: true } : { phone } },
+    { unauthorizedMeans: "customer" },
+  );
 }
 
 export function verifyLoginCode(phone: string, code: string): Promise<VerifyCodeResponse> {

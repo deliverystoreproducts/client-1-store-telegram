@@ -1,10 +1,12 @@
 import { isSameOriginRequest } from "@/lib/csrf";
 import * as api from "@/lib/kamui/client";
+import { UpstreamError } from "@/lib/kamui/errors";
 import { toPublicCustomer } from "@/lib/kamui/map";
 import { fail, failFromUpstream, json, readJson } from "@/lib/http";
 import { normalizePhoneInput } from "@/lib/phone";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
 import { setCustomerSession, setPendingSession } from "@/lib/session";
+import { MEMBERS_ONLY } from "@/lib/site";
 
 /**
  * POST /api/auth/send-code — start phone sign-in.
@@ -44,7 +46,10 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    const res = await api.sendLoginCode(phone);
+    // A members-only shop refuses an unknown phone UPSTREAM, before an SMS is
+    // sent — this tenant should not pay for a code addressed to someone who
+    // cannot use it, from a shop they cannot see.
+    const res = await api.sendLoginCode(phone, { membersOnly: MEMBERS_ONLY });
 
     if ("token" in res) {
       // Store has OTP disabled: we already hold a token.
@@ -58,6 +63,14 @@ export async function POST(req: Request): Promise<Response> {
 
     return json({ status: "code_sent" });
   } catch (e) {
+    // The members-only refusal is a real answer, not a fault: this number is
+    // not a customer of this store. It has to reach the UI as itself, or the
+    // person is told "try again later" about something retrying cannot fix.
+    if (e instanceof UpstreamError && e.status === 403) {
+      return fail(403, "not_a_customer", {
+        message: "That number isn't registered with this store.",
+      });
+    }
     return failFromUpstream(e, "We couldn't send a code right now. Please try again.");
   }
 }

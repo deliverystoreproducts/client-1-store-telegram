@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { OPEN_ROUTE_HEADER, isOpenRoute } from "@/lib/open-routes";
+import { isMemberOpenRoute } from "@/lib/members-routes";
 
 /**
  * THE AGE GATE, ENFORCED BEFORE ANY PAGE CODE RUNS.
@@ -37,6 +38,45 @@ const AGE_COOKIE = "__Host-ybs_age";
 
 const GATE_PATH = "/age";
 
+/**
+ * MEMBERS-ONLY: the second gate.
+ *
+ * Same mechanism as the age gate above and for the same measured reason — a
+ * layout that renders a sign-in screen INSTEAD of children still renders the
+ * page segment and serialises it into the RSC flight payload inlined in the
+ * HTML. View-source then defeats it completely. A gate that only wins in the
+ * pixels is not a control, and for this shop "not rendered at all" is the
+ * requirement, not a nicety.
+ *
+ * So the decision is made HERE, before a route is chosen, and the response for
+ * a signed-out visitor contains the sign-in screen and nothing else.
+ *
+ * The cookie is only checked for PRESENCE. Its signature is verified upstream
+ * on every API call, so a forged cookie buys a visitor the shell of a page
+ * whose every data call then fails — it does not buy them data. Verifying the
+ * JWT in middleware would mean shipping the secret to the edge runtime for no
+ * additional protection.
+ */
+const SIGNIN_PATH = "/signin";
+const SESSION_COOKIE = "__Host-ybs_session";
+
+/**
+ * Reachable without a session when MEMBERS_ONLY is on.
+ *
+ * Deliberately tiny. /signin is the gate itself; the legal notices are open for
+ * the same CalOPPA reason they bypass the age gate — a privacy policy behind a
+ * login is not "conspicuously posted", and the link on the sign-in screen would
+ * lead back to the sign-in screen.
+ */
+/**
+ * Read straight from the environment rather than importing `@/lib/site`.
+ * Middleware runs in the edge runtime; it should not pull in the module of
+ * browser constants just to read one flag.
+ */
+function membersOnlyEnabled(): boolean {
+  return (process.env.MEMBERS_ONLY || "").trim().toLowerCase() === "on";
+}
+
 export default function proxy(req: NextRequest) {
   const passed = req.cookies.get(AGE_COOKIE)?.value === "1";
   const { pathname } = req.nextUrl;
@@ -56,12 +96,48 @@ export default function proxy(req: NextRequest) {
     if (pathname === GATE_PATH) {
       return NextResponse.redirect(new URL("/", req.url));
     }
-    return NextResponse.next(forward);
+    return membersGate(req, forward);
   }
 
   if (pathname === GATE_PATH || open) return NextResponse.next(forward);
 
   return NextResponse.rewrite(new URL(GATE_PATH, req.url), forward);
+}
+
+/**
+ * The members gate, applied after the age gate has been satisfied.
+ *
+ * Order matters and is deliberate: age first. A visitor who has not confirmed
+ * their age should not be shown a shop's sign-in screen either — the age
+ * question is the one the law cares about, and it is asked of everyone.
+ *
+ * A NO-OP when MEMBERS_ONLY is off, so every other storefront behaves exactly
+ * as before. This is the whole reason the feature is a flag in shared code
+ * rather than a fork.
+ */
+function membersGate(
+  req: NextRequest,
+  forward: { request: { headers: Headers } },
+): NextResponse {
+  if (!membersOnlyEnabled()) return NextResponse.next(forward);
+
+  const signedIn = !!req.cookies.get(SESSION_COOKIE)?.value;
+  const { pathname } = req.nextUrl;
+
+  if (signedIn) {
+    // Sitting on /signin with a live session is a dead end; send them shopping.
+    if (pathname === SIGNIN_PATH) {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
+    return NextResponse.next(forward);
+  }
+
+  if (isMemberOpenRoute(pathname)) return NextResponse.next(forward);
+
+  // REWRITE, not redirect: the URL they asked for stays in the address bar, so
+  // signing in returns them to it and a shared link still works. A redirect
+  // would throw the destination away and land everyone on the same page.
+  return NextResponse.rewrite(new URL(SIGNIN_PATH, req.url), forward);
 }
 
 export const config = {

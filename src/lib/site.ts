@@ -116,3 +116,23 @@ export const CART_STORAGE_KEY = "ybs.cart.v1";
  * dashboard screen fills each one. Turn it off before the first customer.
  */
 export const MEDIA_HINTS = (process.env.NEXT_PUBLIC_MEDIA_HINTS || "").trim().toLowerCase() === "on";
+
+
+/**
+ * MEMBERS-ONLY STOREFRONT.
+ *
+ * When on, nothing is served to a visitor without a customer session — not the
+ * shelf, not a product page, not the HTML. They get the sign-in screen and
+ * nothing else, and they can only sign in if their phone is already a customer
+ * of this tenant.
+ *
+ * OFF by default. This is the shape of a private shop (a Telegram-gated club,
+ * a members' list), and it is the opposite of what a public storefront wants —
+ * an open shop must be browsable before anyone identifies themselves, or there
+ * is nothing to sign up FOR.
+ *
+ * It is a build/runtime flag rather than a fork so that one codebase serves
+ * both. A forked copy would drift, and every fix would have to be applied
+ * twice.
+ */
+export const MEMBERS_ONLY = (process.env.MEMBERS_ONLY || "").trim().toLowerCase() === "on";
