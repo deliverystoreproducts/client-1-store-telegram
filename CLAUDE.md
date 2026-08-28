@@ -102,23 +102,47 @@ So: before hardcoding anything client-specific, check whether it belongs on the
 tenant profile. Per-client values in this repo become a fork, and a fork means
 every fix has to be applied N times.
 
-## Mirroring to client repos — RULE: mirror, never fork
+## Mirroring to client repos — RULE: check for divergence FIRST
 
-Client repos are the SAME code with different env vars. To sync:
+Client repos are meant to be the SAME code with different env vars.
+
+**Before any sync, prove the client has nothing you do not:**
+
+```bash
+git fetch <client>
+git log --oneline <client>/main --not main   # MUST be empty
+```
+
+If that prints anything, **stop**. The client has commits of its own and a
+mirror push will destroy them.
+
+This is not hypothetical. On 2026-08-28 the sync below was run without that
+check against a client repo holding ten commits that existed nowhere else — an
+AI budtender hero, mobile shelf filters, the checkout stepper, a purchase-limit
+removal. `merge -s ours` keeps OUR tree and records theirs only as a parent, so
+one push replaced all of it. It was recoverable only because the old commit was
+still reachable.
+
+The tree check in the recipe **did pass**. It confirmed the result matched this
+repo — which is exactly the wrong question when the client is ahead. A green
+check on the wrong assertion is worse than no check: it reads as verification.
+
+Only once the log above is empty:
 
 ```bash
 git checkout -B client-sync main
-git merge -s ours --allow-unrelated-histories <client>/main -m "Sync <client> to YB main"
+git merge -s ours --allow-unrelated-histories <client>/main -m "Sync <client> to main"
+[ "$(git rev-parse HEAD^{tree})" = "$(git rev-parse main^{tree})" ] || echo "DIVERGED — stop"
 git push <client> HEAD:main
 ```
 
-`-s ours` keeps this repo's tree and records the client's history as a parent,
-which is what lets the push fast-forward. **Verify the tree is unchanged before
-pushing** — `git rev-parse HEAD^{tree}` must equal `main^{tree}`.
+**If the client HAS diverged**, the merge has to go the other way: bring its
+commits back here first (cherry-pick or a PR into this repo), then mirror. A
+client repo is allowed to be ahead — it is not allowed to be silently
+overwritten.
 
-Never let a client repo diverge. The moment a fix has to be applied twice by
-hand you are in the per-client-fork model that the platform migration exists to
-end.
+To undo a bad sync: the previous commit stays reachable, so restore its tree on
+top of the bad one and push normally. Never force-push to fix it.
 
 ## Gate before you push
 
