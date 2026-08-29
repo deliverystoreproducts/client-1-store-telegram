@@ -27,6 +27,10 @@ const PRIVATE = [
   "/account",
   "/track",
   "/track/abc123",
+  // Sign-in runs BEFORE the age gate now, so a signed-out visitor must not
+  // reach the age screen either — it would tell a stranger a cannabis shop is
+  // at this address.
+  "/age",
   "/faq",
   "/returns",
   "/contact",
@@ -43,7 +47,7 @@ describe("members-only allow-list", () => {
 
   it("stays limited to the gate itself and the legal notices", () => {
     // A tripwire: widening this should have to be done twice, in code and here.
-    expect([...MEMBER_OPEN_ROUTES].sort()).toEqual(["/age", "/privacy", "/signin", "/terms"]);
+    expect([...MEMBER_OPEN_ROUTES].sort()).toEqual(["/privacy", "/signin", "/terms"]);
   });
 
   it("does not open a route by prefix", () => {

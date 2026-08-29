@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { OPEN_ROUTE_HEADER, isOpenRoute } from "@/lib/open-routes";
-import { isMemberOpenRoute } from "@/lib/members-routes";
+import { MEMBERS_GATE_HEADER, isMemberOpenRoute } from "@/lib/members-routes";
 
 /**
  * THE AGE GATE, ENFORCED BEFORE ANY PAGE CODE RUNS.
@@ -58,6 +58,7 @@ const GATE_PATH = "/age";
  * additional protection.
  */
 const SIGNIN_PATH = "/signin";
+
 const SESSION_COOKIE = "__Host-ybs_session";
 
 /**
@@ -87,16 +88,23 @@ export default function proxy(req: NextRequest) {
   // client cannot claim it for /product/1.
   const headers = new Headers(req.headers);
   headers.delete(OPEN_ROUTE_HEADER);
+  headers.delete(MEMBERS_GATE_HEADER);
   const open = isOpenRoute(pathname);
   if (open) headers.set(OPEN_ROUTE_HEADER, "1");
   const forward = { request: { headers } };
+
+  // SIGN-IN FIRST, then age. A members-only shop shows nothing at all to a
+  // stranger — not even the age question, which would tell them a shop is here.
+  // Once they are in, the age gate is asked of them like any other customer.
+  const members = membersGate(req, forward);
+  if (members) return members;
 
   if (passed) {
     // Nothing left to answer; /age is not a page anyone should sit on.
     if (pathname === GATE_PATH) {
       return NextResponse.redirect(new URL("/", req.url));
     }
-    return membersGate(req, forward);
+    return NextResponse.next(forward);
   }
 
   if (pathname === GATE_PATH || open) return NextResponse.next(forward);
@@ -105,21 +113,26 @@ export default function proxy(req: NextRequest) {
 }
 
 /**
- * The members gate, applied after the age gate has been satisfied.
+ * The members gate. Runs BEFORE the age gate.
  *
- * Order matters and is deliberate: age first. A visitor who has not confirmed
- * their age should not be shown a shop's sign-in screen either — the age
- * question is the one the law cares about, and it is asked of everyone.
+ * Returns a response when it has an opinion, and `null` when it does not — so
+ * the caller falls through to the age gate. That is the difference between "the
+ * shop is private and you are not in it" and "you are in; now answer the age
+ * question like everyone else".
  *
- * A NO-OP when MEMBERS_ONLY is off, so every other storefront behaves exactly
- * as before. This is the whole reason the feature is a flag in shared code
- * rather than a fork.
+ * ORDER: sign-in first. A private shop shows a stranger nothing at all, and an
+ * age prompt is not nothing — it tells them a cannabis shop is at this address.
+ * Once signed in, the age gate applies exactly as it does on every other
+ * storefront.
+ *
+ * A NO-OP when MEMBERS_ONLY is off, so every other storefront behaves as before.
+ * That is the whole reason this is a flag in shared code rather than a fork.
  */
 function membersGate(
   req: NextRequest,
   forward: { request: { headers: Headers } },
-): NextResponse {
-  if (!membersOnlyEnabled()) return NextResponse.next(forward);
+): NextResponse | null {
+  if (!membersOnlyEnabled()) return null;
 
   const signedIn = !!req.cookies.get(SESSION_COOKIE)?.value;
   const { pathname } = req.nextUrl;
@@ -129,16 +142,22 @@ function membersGate(
     if (pathname === SIGNIN_PATH) {
       return NextResponse.redirect(new URL("/", req.url));
     }
-    return NextResponse.next(forward);
+    return null; // in — let the age gate have its turn
   }
 
-  if (isMemberOpenRoute(pathname)) return NextResponse.next(forward);
+  if (isMemberOpenRoute(pathname)) return null;
 
   // REWRITE, not redirect: the URL they asked for stays in the address bar, so
   // signing in returns them to it and a shared link still works. A redirect
   // would throw the destination away and land everyone on the same page.
-  return NextResponse.rewrite(new URL(SIGNIN_PATH, req.url), forward);
+  //
+  // The header is what makes the layout render the gate INSTEAD of the shop.
+  // Without it the rewrite is silent and /signin renders inside the full chrome.
+  const headers = new Headers(forward.request.headers);
+  headers.set(MEMBERS_GATE_HEADER, "1");
+  return NextResponse.rewrite(new URL(SIGNIN_PATH, req.url), { request: { headers } });
 }
+
 
 export const config = {
   /**

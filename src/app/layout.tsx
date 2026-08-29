@@ -11,6 +11,8 @@ import { StoreUnavailable } from "@/components/StoreUnavailable";
 import { SwRegister } from "@/components/SwRegister";
 import { isUpstreamConfigured } from "@/lib/kamui/env";
 import { OPEN_ROUTE_HEADER } from "@/lib/open-routes";
+import { MEMBERS_GATE_HEADER } from "@/lib/members-routes";
+import { MembersGate } from "@/components/MembersGate";
 import { hasPassedAgeGate } from "@/lib/session";
 import { getStoreProfile } from "@/lib/store";
 import { LICENSE_PLACEHOLDER, MISSING, SITE_TAGLINE } from "@/lib/site";
@@ -98,8 +100,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // gate lead back to the gate. Those two routes render no catalogue data at
   // all, so the thing layer 1 protects is not in play. The header is stamped by
   // `src/proxy.ts`, which deletes any inbound copy first.
-  const openRoute = (await headers()).get(OPEN_ROUTE_HEADER) === "1";
+  const reqHeaders = await headers();
+  const openRoute = reqHeaders.get(OPEN_ROUTE_HEADER) === "1";
   const gated = !passedGate && !openRoute;
+
+  // MEMBERS-ONLY: src/proxy.ts stamps this when it rewrites a signed-out
+  // visitor to /signin. Without the header this branch cannot exist — the
+  // layout has no other way to tell "navigated to /signin" from "rewritten
+  // here from /product/1", which is why the gate first shipped rendering inside
+  // the full shop chrome. The proxy deletes any inbound copy before setting it.
+  const membersGated = reqHeaders.get(MEMBERS_GATE_HEADER) === "1";
 
   const year = new Date().getFullYear();
 
@@ -135,6 +145,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
         {!configured ? (
           <StoreUnavailable storeName={process.env.NEXT_PUBLIC_SITE_NAME} />
+        ) : membersGated ? (
+          // SIGN-IN FIRST, before the age gate. A private shop shows a stranger
+          // nothing at all — and an age prompt is not nothing: it tells them a
+          // cannabis shop is at this address. `children` is discarded, so the
+          // page they asked for never runs and never reaches the flight payload.
+          <MembersGate />
         ) : gated ? (
           // The store is not rendered at all until the visitor answers. This is a
           // server-side decision, so there is no frame in which the catalog is

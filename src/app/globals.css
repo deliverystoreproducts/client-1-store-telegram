@@ -2909,7 +2909,7 @@ body::after {
 /* ═══════════════════ CHECKOUT STEPS ═══════════════════ */
 /* Plain, like the rest of checkout: a row of labels that says where you are
    and what is left, not a decorated progress bar. */
-.steps {
+.plain .steps {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem 1rem;
@@ -4884,4 +4884,158 @@ body::after {
 .carousel-track .tile-brand {
   flex: none;
   min-height: 1.3em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MEMBERS GATE — a blank white screen and a phone number
+   ═══════════════════════════════════════════════════════════════════════════
+   Plain white in EVERY theme. The site's ambient gradient and film grain are
+   both `position: fixed` (body::before at z-index -1, body::after at 90), so a
+   simple background on this element is not enough — the grain would sit over
+   the top and the gradient behind it. Both are neutralised below.
+
+   The form sits at the BOTTOM: a phone keyboard opens over the lower half, and
+   a field anchored there stays with the thumb instead of jumping.
+*/
+
+.mgate {
+  min-height: 100dvh;
+  display: grid;
+  align-content: end;
+  justify-items: stretch;
+  padding: clamp(1.5rem, 6vw, 3rem);
+  padding-bottom: clamp(2rem, 8vh, 4.5rem);
+  position: relative;
+  isolation: isolate;
+  /* Set explicitly, not inherited: the token would follow the theme, and this
+     screen is white in both. */
+  color: #18181b;
+}
+
+/* The white ground. `fixed` so it covers the viewport regardless of scroll, and
+   `isolation: isolate` on .mgate is what lets it paint above body::before. */
+.mgate::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: #fff;
+}
+
+/* body::after is the film grain at z-index 90 — it would sit over a screen that
+   is supposed to be plain. Covered rather than disabled, so nothing about the
+   shared body rules has to change for one page. */
+.mgate::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 91;
+  background: #fff;
+  pointer-events: none;
+}
+
+.mgate-inner {
+  position: relative;
+  z-index: 92; /* above the grain cover */
+  width: 100%;
+  max-width: 26rem;
+  margin-inline: auto;
+}
+
+.mgate-note {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #52525b;
+  margin: 0 0 1.1rem;
+}
+
+.mgate-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #71717a;
+  margin-bottom: 0.4rem;
+}
+
+.mgate-input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0.7rem 0.95rem;
+  font-size: 1rem;
+  color: #18181b;
+  background: #fff;
+  border: 1px solid #d4d4d8;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.16s var(--ease);
+}
+
+.mgate-input::placeholder {
+  color: #a1a1aa;
+}
+
+.mgate-input:focus {
+  border-color: #18181b;
+}
+
+.mgate-btn {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 0.7rem;
+  border: 0;
+  border-radius: 10px;
+  background: #18181b;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: opacity 0.16s var(--ease);
+}
+
+.mgate-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.mgate-btn:not(:disabled):hover {
+  opacity: 0.86;
+}
+
+.mgate-btn:focus-visible,
+.mgate-input:focus-visible,
+.mgate-back:focus-visible {
+  outline: 2px solid #18181b;
+  outline-offset: 2px;
+}
+
+.mgate-fine {
+  margin: 0.9rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #71717a;
+}
+
+.mgate-fine a,
+.mgate-back {
+  color: #52525b;
+  text-decoration: underline;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.mgate-error {
+  margin: 0 0 0.9rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
