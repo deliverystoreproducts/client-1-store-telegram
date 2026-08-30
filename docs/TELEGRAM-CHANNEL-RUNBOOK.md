@@ -18,7 +18,7 @@ assuming it does.
 
 | # | The thing | Where it lives | What it decides |
 |---|---|---|---|
-| ① | **Which channel gates access** | `CHANNEL_ID` env var (Railway) | Whose membership is checked |
+| ① | **Which chats gate access** | `CHANNEL_ID` env var (Railway) | Whose membership is checked |
 | ② | **Which URL the Mini App opens** | BotFather → `/myapps` → Edit Web App URL | What the customer actually sees |
 | ③ | **Which link is posted in the channel** | The inline button on the channel post | How they get in |
 
@@ -69,6 +69,29 @@ curl -s "https://api.telegram.org/bot<TOKEN>/getChat?chat_id=-100XXXXXXXXXX"
 Expect the channel's title back. `{"ok":false,…"chat not found"}` means the id
 is wrong **or** the bot was never added — the two are indistinguishable in the
 reply, so re-check A1 first.
+
+### A2b. ADDING a chat rather than moving
+
+`CHANNEL_ID` takes a **comma-separated list**, and membership in ANY chat on it
+admits:
+
+```
+CHANNEL_ID=-1003966870688,-1004444444444,-1005555555555
+```
+
+So one deployment and one bot can serve several closed chats — a second
+channel, a VIP group, a wholesale group. Spaces and a trailing comma are
+tolerated; empty entries are dropped; a value that is only commas configures
+nothing and refuses everyone.
+
+**Adding a chat needs no secret rotation** — nobody loses access, nobody is
+signed out. Do steps A1, A2 and A4 for the new chat and stop. §A3 below is for
+MOVING or REMOVING, which is the case that bites.
+
+The bot must be an ADMINISTRATOR of every chat listed. One where it is only a
+subscriber answers 400 and silently admits nobody; `getChatMember` failures now
+log the chat id and the HTTP status, so the failing chat is named rather than
+guessed at (Railway → Deploy logs → `[telegram]`).
 
 ### A3. Set `CHANNEL_ID` — and rotate `JWT_SECRET` in the same edit
 
@@ -228,7 +251,7 @@ Then open it from the channel button, on a phone, as a real member.
 |---|---|---|
 | `TELEGRAM_GATE` | no | `on` enables the channel check. Anything else = off. |
 | `BOT_TOKEN` | **yes** | HMAC key for every `initData` signature. Never `NEXT_PUBLIC_*`. A leaked token lets anyone mint `initData` for any user id and the gate becomes decorative. |
-| `CHANNEL_ID` | no | Numeric, with the leading `-100`. |
+| `CHANNEL_ID` | no | One or more numeric chat ids, comma-separated, each with the leading `-100`. Membership in ANY admits. |
 | `JWT_SECRET` | **yes** | Signs the membership cookie. Rotate to evict everyone. |
 | `SITE_ORIGIN` | no | Only when a proxy rewrites `Host`. |
 
