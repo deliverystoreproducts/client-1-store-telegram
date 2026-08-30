@@ -23,9 +23,16 @@ import { formatPhone } from "@/lib/phone";
  * NOT `SignInFlow`. That component is shared with checkout, so restyling it
  * would change the checkout sign-in too.
  *
- * The privacy link is not decoration and must not be removed to make the screen
- * emptier: this form collects a phone number, so it is a point of collection,
- * and B&P § 22575 wants the policy conspicuously posted.
+ * The one line of fine print under the button is NOT decoration and must not be
+ * deleted to make the screen emptier. This form collects a phone number, so it
+ * is a point of collection, and B&P § 22575 wants the privacy notice posted
+ * conspicuously at it.
+ *
+ * It used to be a link to /privacy. It is a sentence now because no route may
+ * open without a session — /privacy included — and a link that leads back to
+ * this same white screen is worse than no link: it tells the visitor the
+ * disclosure exists and then does not show it. The policy page is unchanged and
+ * is one tap away the moment they are signed in.
  */
 /**
  * The Telegram handle the vendored SDK installs. Only the two fields this gate
@@ -188,8 +195,7 @@ export function MembersGate({ telegramGate }: { telegramGate: boolean }) {
             </button>
 
             <p className="mgate-fine">
-              We only use it to sign you in. See our{" "}
-              <a href="/privacy">privacy policy</a>.
+              Your number is used only to sign you in, and is not shared.
             </p>
           </form>
         ) : (
