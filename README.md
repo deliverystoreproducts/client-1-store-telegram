@@ -259,8 +259,11 @@ The upstream tenant profile carries an `ageGate` boolean. It is deliberately
 toggle cannot reach this code. Only `minAge` crosses, defaulting to 21 in the
 mapper and in the fail-safe fallback profile.
 
-**Two routes are exempt, and neither is a loophole: `/privacy` and `/terms`**
-(`src/lib/open-routes.ts`). CalOPPA requires the privacy policy to be
+**Two routes are exempt from the AGE gate, and neither is a loophole:
+`/privacy` and `/terms`** (`src/lib/open-routes.ts`). This is the age gate only
+— a members-only shop (`MEMBERS_ONLY=on`) exempts nothing at all, and its
+privacy notice lives on the sign-in screen instead; see COMPLIANCE.md §
+"Members-only deployments". CalOPPA requires the privacy policy to be
 conspicuously posted, and the gate is itself a point of collection — it sets a
 cookie before anyone has read anything — so putting the policy behind it makes
 the link on the gate lead back to the gate. Both pages are static legal prose

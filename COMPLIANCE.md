@@ -1493,9 +1493,28 @@ Mapped to the storefront's existing Next.js routes.
 | Licence type ("Licensed non-storefront retailer") | SHOULD |
 | Link to `/privacy` | **MUST** — CalOPPA conspicuous posting |
 | Link to `/terms` | SHOULD |
+| *(members-only shops: see the note below — the notice is a sentence on the gate, not a link)* | |
 | Link to DCC licence lookup | SHOULD |
 | GOVERNMENT WARNING text | SHOULD |
 | "21+ only. Keep out of reach of children." | SHOULD |
+
+**Members-only deployments (`MEMBERS_ONLY=on`).** The footer above is only
+rendered to a signed-in customer, because on those shops nothing at all is
+rendered to anyone else — `/privacy` and `/terms` included. That is an owner
+requirement, not a compliance judgement, and it is deliberate: the shop is
+private to existing customers of one Telegram channel and is not marketed to
+the public.
+
+The CalOPPA duty does not disappear with the link. The sign-in gate collects a
+phone number, so it is a point of collection, and the notice sits there — as a
+sentence rather than a link (`src/components/MembersGate.tsx`), because a link
+leading back to the same white screen announces a disclosure and then declines
+to show it. Both pages exist unchanged and are reached from the footer the
+moment someone signs in.
+
+If a members-only shop is ever opened to the public, the first thing to restore
+is `/privacy` in `MEMBER_OPEN_ROUTES` — and at that point the sentence should
+go back to being a link.
 | Prop 65 warning | ❌ **Footer placement does not satisfy Prop 65.** Must be on the PDP. A footer copy is harmless but earns nothing. |
 
 ### `/` age gate — `AgeGate.tsx`
