@@ -67,7 +67,12 @@ export async function generateMetadata(): Promise<Metadata> {
       icons: { icon: [], apple: [], shortcut: [] },
       // No description, no appleWebApp — that block names the store and pulls in
       // a dozen branded splash images.
-      robots: { index: false, follow: false },
+      robots: {
+        index: false,
+        follow: false,
+        nocache: true,
+        googleBot: { index: false, follow: false, noimageindex: true },
+      },
     };
   }
   return SITE_METADATA;
@@ -79,14 +84,25 @@ const SITE_METADATA: Metadata = {
     template: `%s · ${process.env.NEXT_PUBLIC_SITE_NAME || "YB Cannabis Co."}`,
   },
   description: SITE_TAGLINE,
-  // No indexing by default: a store should opt in to search engines once its
-  // real domain, hours and legal pages are in place. Launch day flips ONE env
-  // var (SEO_INDEX=on) — until then this is also the single deliberate
-  // Lighthouse SEO failure.
-  robots:
-    process.env.SEO_INDEX === "on"
-      ? { index: true, follow: true }
-      : { index: false, follow: false },
+  // NEVER INDEXED, and there is no env var that changes it.
+  //
+  // This was `SEO_INDEX === "on" ? index : noindex` — the shared storefront's
+  // launch switch. It does not belong on this deployment: the only way in is
+  // the Telegram Mini App, a browser visitor never gets past the gate, and so
+  // every page a crawler could reach is a blank "Under construction" shell.
+  // Leaving the switch here would put publishing the store's name to search
+  // engines one env var away, for no gain at all.
+  //
+  // Three layers say this on purpose: src/app/robots.ts asks (by wildcard and
+  // by name), the X-Robots-Tag header in next.config.ts instructs an indexer
+  // that already holds the page, and this meta tag is what one reads off the
+  // page itself.
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: { index: false, follow: false, noimageindex: true },
+  },
   // Installed-app identity for iOS (Android reads the manifest). The startup
   // images kill the blank white flash an installed PWA otherwise shows on
   // launch; Safari picks the FIRST link whose media matches, so the dark

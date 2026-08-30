@@ -49,6 +49,29 @@ const config: NextConfig = {
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            // NOTHING MAY INDEX THIS SITE — the layer that binds.
+            //
+            // robots.txt is a request; this is an instruction to an indexer that
+            // already has the page, and Google, Bing and the major AI crawlers
+            // honour it. It is set on EVERY response, including the ones the
+            // gate short-circuits, so a crawler that reaches any URL on this
+            // origin is told the same thing whatever it fetched.
+            //
+            // Why unconditional rather than behind SEO_INDEX: the only way into
+            // this deployment is the Telegram Mini App. A browser visitor is
+            // refused before a route is chosen, so every page a crawler can
+            // reach is the same blank shell. Indexing it would file a dead
+            // entry under the store's name and advertise that this domain
+            // belongs to a licensed cannabis retailer — cost with no benefit.
+            //
+            // noarchive/nosnippet/noimageindex stop the cached copy, the
+            // excerpt and the thumbnail. noai/noimageai are not a standard;
+            // they are honoured by some crawlers and cost nothing to state.
+            key: "X-Robots-Tag",
+            value:
+              "noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate, noai, noimageai",
+          },
           // X-Frame-Options is REMOVED, deliberately. It has no allow-list
           // syntax — DENY or SAMEORIGIN and nothing else — so it cannot express
           // "Telegram may frame this, nobody else may". CSP frame-ancestors
