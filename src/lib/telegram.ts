@@ -27,7 +27,15 @@ const MEMBER_STATUSES = new Set(["creator", "administrator", "member"]);
 
 export interface TelegramEnv {
   botToken: string;
-  channelId: string;
+  /**
+   * One or more chat ids. Membership in ANY of them admits.
+   *
+   * CHANNEL_ID accepts a comma-separated list, so one deployment can serve
+   * several closed chats — a second channel, a VIP group, a wholesale group —
+   * without a second deployment or a second bot. A single id is still a single
+   * id, so nothing that worked before changes.
+   */
+  channelIds: string[];
   jwtSecret: string;
 }
 
@@ -37,10 +45,13 @@ export interface TelegramEnv {
  */
 export function telegramEnv(): TelegramEnv | null {
   const botToken = (process.env.BOT_TOKEN || "").trim();
-  const channelId = (process.env.CHANNEL_ID || "").trim();
   const jwtSecret = (process.env.JWT_SECRET || "").trim();
-  if (!botToken || !channelId || !jwtSecret) return null;
-  return { botToken, channelId, jwtSecret };
+  const channelIds = (process.env.CHANNEL_ID || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (!botToken || channelIds.length === 0 || !jwtSecret) return null;
+  return { botToken, channelIds, jwtSecret };
 }
 
 export const TELEGRAM_GATE_ENABLED = (process.env.TELEGRAM_GATE || "").trim().toLowerCase() === "on";
@@ -119,21 +130,52 @@ export function verifyInitData(initData: string, botToken: string): InitDataResu
  * Requires the bot to be an ADMIN of the channel; Telegram answers 400
  * otherwise, which lands in the same closed branch.
  */
-export async function isChannelMember(
-  userId: number,
-  { botToken, channelId }: TelegramEnv,
-): Promise<boolean> {
+/** One getChatMember call. False for every failure — see isChannelMember. */
+async function isMemberOf(userId: number, botToken: string, chatId: string): Promise<boolean> {
   const url =
     `https://api.telegram.org/bot${encodeURIComponent(botToken)}/getChatMember` +
-    `?chat_id=${encodeURIComponent(channelId)}&user_id=${userId}`;
+    `?chat_id=${encodeURIComponent(chatId)}&user_id=${userId}`;
 
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(8000), cache: "no-store" });
-    if (!res.ok) return false;
+    if (!res.ok) {
+      // The overwhelmingly common cause is the bot not being an ADMINISTRATOR
+      // of this chat, which Telegram answers with 400. It is indistinguishable
+      // here from a wrong id, so log the status and the chat: without this the
+      // symptom is "every real member is refused" with nothing in the logs,
+      // which is exactly how it presented the first time.
+      console.warn(`[telegram] getChatMember ${chatId} -> HTTP ${res.status}`);
+      return false;
+    }
     const body = (await res.json()) as { ok?: boolean; result?: { status?: string } };
-    if (!body?.ok) return false;
+    if (!body?.ok) {
+      console.warn(`[telegram] getChatMember ${chatId} -> not ok`);
+      return false;
+    }
     return MEMBER_STATUSES.has(body.result?.status ?? "");
-  } catch {
+  } catch (e) {
+    console.warn(`[telegram] getChatMember ${chatId} failed: ${e instanceof Error ? e.message : e}`);
     return false;
   }
+}
+
+/**
+ * Is this user in ANY of the configured chats?
+ *
+ * Checked in PARALLEL rather than in sequence: each call carries an 8s timeout,
+ * and five chats checked one after another would make a slow Telegram into a
+ * 40-second blank screen for a legitimate member. In parallel the worst case
+ * stays one timeout however many chats are configured.
+ *
+ * Fails closed per chat and overall — a chat that errors simply does not admit,
+ * and if none admit the answer is no.
+ */
+export async function isChannelMember(
+  userId: number,
+  { botToken, channelIds }: TelegramEnv,
+): Promise<boolean> {
+  const results = await Promise.all(
+    channelIds.map((chatId) => isMemberOf(userId, botToken, chatId)),
+  );
+  return results.some(Boolean);
 }

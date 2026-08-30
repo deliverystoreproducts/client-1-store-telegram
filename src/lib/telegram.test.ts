@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, it } from "vitest";
-import { verifyInitData } from "@/lib/telegram";
+import { afterEach, describe, expect, it } from "vitest";
+import { telegramEnv, verifyInitData } from "@/lib/telegram";
 import { signTelegramToken, verifyTelegramToken } from "@/lib/telegram-token";
 
 /**
@@ -128,5 +128,51 @@ describe("telegram token", () => {
     expect(await verifyTelegramToken("a.b", SECRET)).toBeNull();
     const token = await signTelegramToken({ tg: 1, exp: future }, SECRET);
     expect(await verifyTelegramToken(token, "")).toBeNull();
+  });
+});
+
+
+describe("telegramEnv — one chat or several", () => {
+  const saved = { ...process.env };
+  afterEach(() => {
+    process.env = { ...saved };
+  });
+
+  function withEnv(channel: string) {
+    process.env.BOT_TOKEN = "111:tok";
+    process.env.JWT_SECRET = "s";
+    process.env.CHANNEL_ID = channel;
+    return telegramEnv();
+  }
+
+  it("reads a single id, exactly as before", () => {
+    expect(withEnv("-1001234567890")?.channelIds).toEqual(["-1001234567890"]);
+  });
+
+  it("reads a comma-separated list, so one shop can serve several closed chats", () => {
+    expect(withEnv("-1001111111111,-1002222222222,-1003333333333")?.channelIds).toEqual([
+      "-1001111111111",
+      "-1002222222222",
+      "-1003333333333",
+    ]);
+  });
+
+  it("tolerates the spaces a human will type", () => {
+    expect(withEnv(" -100111 , -100222 ")?.channelIds).toEqual(["-100111", "-100222"]);
+  });
+
+  it("drops empty entries from a trailing or doubled comma", () => {
+    // "-100111,,-100222," is what a half-finished edit looks like. An empty id
+    // would be sent to getChatMember as chat_id= and answered 400 — a wasted
+    // call on the bot's quota for every sign-in, forever.
+    expect(withEnv("-100111,,-100222,")?.channelIds).toEqual(["-100111", "-100222"]);
+  });
+
+  it("returns null when CHANNEL_ID is only commas — a half-configured gate admits nobody", () => {
+    expect(withEnv(",, ,")).toBeNull();
+  });
+
+  it("returns null when CHANNEL_ID is unset", () => {
+    expect(withEnv("")).toBeNull();
   });
 });
