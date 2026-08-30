@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { NAMED_CRAWLERS } from "@/lib/crawlers";
 
 /**
  * NOTHING MAY INDEX THIS SITE. Not a search engine, not an AI crawler, not an
@@ -32,43 +33,6 @@ import type { MetadataRoute } from "next";
  * history; see the same warning in src/app/manifest.ts.
  */
 export const dynamic = "force-dynamic";
-
-/**
- * AI training / retrieval crawlers, and the SEO crawlers that feed them.
- * Sorted by operator so additions land in an obvious place.
- */
-const NAMED_CRAWLERS = [
-  // OpenAI
-  "GPTBot", "ChatGPT-User", "OAI-SearchBot",
-  // Anthropic
-  "ClaudeBot", "Claude-Web", "Claude-User", "Claude-SearchBot", "anthropic-ai",
-  // Google — Google-Extended is the AI-training opt-out token, separate from Googlebot
-  "Google-Extended", "GoogleOther", "Googlebot", "Googlebot-Image",
-  // Microsoft / Bing
-  "bingbot", "msnbot",
-  // Common Crawl — the corpus most models are trained from
-  "CCBot",
-  // Perplexity
-  "PerplexityBot", "Perplexity-User",
-  // ByteDance
-  "Bytespider",
-  // Amazon
-  "Amazonbot",
-  // Apple — Applebot-Extended is the AI-training token
-  "Applebot", "Applebot-Extended",
-  // Meta
-  "FacebookBot", "meta-externalagent", "meta-externalfetcher",
-  // Others that publish a token
-  "cohere-ai", "cohere-training-data-crawler", "Diffbot", "ImagesiftBot",
-  "Omgilibot", "Omgili", "YouBot", "Timpibot", "AI2Bot", "PanguBot",
-  "Kangaroo Bot", "Webzio-Extended", "Scrapy", "petalbot",
-  // Search engines that are not Google or Bing
-  "Slurp", "DuckDuckBot", "Baiduspider", "YandexBot", "Sogou", "Exabot",
-  // SEO / backlink crawlers — these resell the crawl
-  "AhrefsBot", "SemrushBot", "MJ12bot", "DotBot", "BLEXBot", "DataForSeoBot",
-  // Archivers
-  "ia_archiver", "archive.org_bot", "Wayback",
-];
 
 export default function robots(): MetadataRoute.Robots {
   return {

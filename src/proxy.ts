@@ -6,6 +6,7 @@ import {
   verifyTelegramToken,
 } from "@/lib/telegram-token";
 import { OPEN_ROUTE_HEADER, isOpenRoute } from "@/lib/open-routes";
+import { isCrawler } from "@/lib/crawlers";
 import {
   GATE_STAMP_HEADER,
   MEMBERS_GATE_HEADER,
@@ -131,6 +132,25 @@ export default async function proxy(req: NextRequest) {
   const open = isOpenRoute(pathname);
   if (open) headers.set(OPEN_ROUTE_HEADER, "1");
   const forward = { request: { headers } };
+
+  // KNOWN CRAWLERS ARE REFUSED BEFORE ANYTHING ELSE — before the API gate,
+  // before the members gate, before a route is chosen, before any upstream
+  // call. 403 and an empty body.
+  //
+  // robots.txt asks and the X-Robots-Tag header instructs; both assume a
+  // crawler that plays by the rules. This is for the ones that do not. It does
+  // NOT stop the request arriving — nothing in an application can, that needs a
+  // WAF in front of the origin — but it means a crawler that ignores every
+  // convention still receives zero bytes of HTML instead of the gate page.
+  //
+  // /api/health is exempt and must stay exempt: Railway's health probe hits it,
+  // and a probe that starts failing takes every deploy down with it.
+  if (pathname !== "/api/health" && isCrawler(req.headers.get("user-agent"))) {
+    return new NextResponse(null, {
+      status: 403,
+      headers: { "X-Robots-Tag": "noindex, nofollow, noarchive, noai" },
+    });
+  }
 
   // API routes are DATA, and they are answered before either gate below can
   // rewrite them. Two separate reasons, both learned the hard way:
