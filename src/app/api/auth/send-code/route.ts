@@ -94,13 +94,31 @@ export async function POST(req: Request): Promise<Response> {
 
     return json({ status: "code_sent" });
   } catch (e) {
-    // The members-only refusal is a real answer, not a fault: this number is
-    // not a customer of this store. It has to reach the UI as itself, or the
-    // person is told "try again later" about something retrying cannot fix.
+    /**
+     * A NUMBER THAT IS NOT A CUSTOMER GETS THE SAME ANSWER AS ONE THAT IS.
+     *
+     * This used to return 403 `not_a_customer` — "That number isn't registered
+     * with this store." — on the reasoning that retrying cannot fix not being a
+     * customer, so the person deserves to be told.
+     *
+     * That reasoning was about the wrong person. Anyone who reaches this route
+     * has already passed the channel check, so the honest message helps a member
+     * who mistyped a digit and helps an attacker equally: POST a number, read
+     * the status, learn whether that human shops here. It is a membership
+     * oracle for a PRIVATE shop, and turning a list of phone numbers into a
+     * customer list is precisely what this deployment exists to prevent.
+     *
+     * So: 200 `code_sent`, byte-identical to a real send, and the UI says "if
+     * that number is registered, a code is on its way". A member who mistyped
+     * finds out at the code step, where they can correct it.
+     *
+     * What is NOT closed: an unknown number returns faster, because no SMS is
+     * dispatched. Closing that means padding every response to a fixed floor —
+     * worth doing if this shop is ever targeted, and noted here so the next
+     * person knows it was considered rather than missed.
+     */
     if (e instanceof UpstreamError && e.status === 403) {
-      return fail(403, "not_a_customer", {
-        message: "That number isn't registered with this store.",
-      });
+      return json({ status: "code_sent" });
     }
     return failFromUpstream(e, "We couldn't send a code right now. Please try again.");
   }

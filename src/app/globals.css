@@ -5018,8 +5018,7 @@ body::after {
   color: #71717a;
 }
 
-.mgate-fine a,
-.mgate-back {
+.mgate-fine a {
   color: #52525b;
   text-decoration: underline;
   background: none;
@@ -5027,6 +5026,30 @@ body::after {
   padding: 0;
   font: inherit;
   cursor: pointer;
+}
+
+/* The escape hatch on the code step. A full-width secondary button rather than
+   the 0.8rem grey underline it used to be: the person reaching for it is the
+   one whose code did not arrive, and a 42px target they can actually hit is
+   the difference between correcting a typo and closing the app. */
+.mgate-back {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 0.75rem 0 0;
+  padding: 0.7rem 1rem;
+  background: none;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  color: #3f3f46;
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.mgate-back:hover {
+  border-color: #a1a1aa;
+  color: #18181b;
 }
 
 .mgate-error {

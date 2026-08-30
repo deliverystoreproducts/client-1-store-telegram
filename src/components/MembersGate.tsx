@@ -124,7 +124,9 @@ export function MembersGate({ telegramGate }: { telegramGate: boolean }) {
       await apiPost("/api/auth/send-code", { phone });
       setStep("code");
     } catch (err) {
-      // `not_a_customer` arrives as its own message and is shown as-is. Telling
+      // `not_a_customer` no longer exists — the upstream answers the same way
+      // for a registered number and an unregistered one, so this shows only
+      // real faults. Telling
       // someone to "try again later" about not being a customer would send them
       // round a loop that cannot resolve.
       setError(
@@ -187,7 +189,8 @@ export function MembersGate({ telegramGate }: { telegramGate: boolean }) {
         ) : step === "phone" ? (
           <form onSubmit={sendCode}>
             <p className="mgate-note">
-              Enter your mobile number and we&apos;ll text you a code.
+              Enter your mobile number. If it&apos;s registered with us,
+              we&apos;ll text you a code.
             </p>
 
             <label className="mgate-label" htmlFor="mg-phone">
@@ -217,7 +220,8 @@ export function MembersGate({ telegramGate }: { telegramGate: boolean }) {
         ) : (
           <form onSubmit={verify}>
             <p className="mgate-note">
-              We sent a code to {formatPhone(phone)}. Enter it below.
+              If {formatPhone(phone)} is registered with us, a code is on its
+              way. Enter it below.
             </p>
 
             <label className="mgate-label" htmlFor="mg-code">
@@ -240,19 +244,23 @@ export function MembersGate({ telegramGate }: { telegramGate: boolean }) {
               {busy ? "Checking…" : "Continue"}
             </button>
 
-            <p className="mgate-fine">
-              <button
-                className="mgate-back"
-                type="button"
-                onClick={() => {
-                  setStep("phone");
-                  setCode("");
-                  setError(null);
-                }}
-              >
-                Use a different number
-              </button>
-            </p>
+            {/* The way out. Someone whose code never arrives — wrong number,
+                no signal, a typo they cannot see — otherwise has a screen with
+                one field and no exit. This was an underlined 0.8rem link in
+                grey; it is a real control now, because the person who needs it
+                is by definition the one having a bad time. */}
+            <button
+              className="mgate-back"
+              type="button"
+              onClick={() => {
+                setStep("phone");
+                setCode("");
+                setError(null);
+                setBusy(false);
+              }}
+            >
+              Use a different number
+            </button>
           </form>
         )}
       </div>
