@@ -173,6 +173,12 @@ No other plain-http origin gets that exemption.
 
 ## 3. Configuration
 
+> **Telegram Mini App / members-only deployments:** the channel gate, the
+> Mini App URL, and the button posted in the channel are configured outside
+> this table and outside this repo. Moving a shop to a different channel or a
+> different URL is an operator task with two silent failure modes — see
+> [`docs/TELEGRAM-CHANNEL-RUNBOOK.md`](docs/TELEGRAM-CHANNEL-RUNBOOK.md).
+
 Full annotations live in `.env.example`. The short version:
 
 | Variable | Secret? | Purpose |
