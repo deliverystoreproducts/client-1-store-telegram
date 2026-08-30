@@ -16,6 +16,14 @@ import { MEMBERS_ONLY } from "@/lib/site";
  * A members-only shop disallows everything: it is private by construction, and
  * SEO_INDEX has nothing to say about a shop with no public pages.
  */
+// Same trap as src/app/manifest.ts: without this Next PRERENDERS this route and
+// bakes in whatever the BUILD environment knew, so flipping MEMBERS_ONLY at
+// runtime — which is how the flag works everywhere else — would do nothing here.
+// It happens to emit the right bytes today only because the Dockerfile passes no
+// SEO_INDEX build arg either; add one for a public storefront and every
+// members-only shop built from it would ship "Allow: /".
+export const dynamic = "force-dynamic";
+
 export default function robots(): MetadataRoute.Robots {
   if (MEMBERS_ONLY || process.env.SEO_INDEX !== "on") {
     return { rules: { userAgent: "*", disallow: "/" } };

@@ -135,8 +135,12 @@ export function isApiBootstrapRoute(pathname: string): boolean {
  *   telegram-web-app.js  the gate itself needs it — gating it is how the Mini
  *                        App blocked everyone last week
  *   /fonts/*             the gate renders in them
- *   sw.js, offline.html  no branding in either (offline.html is titled
- *                        "Offline" and names nothing)
+ *   sw.js, offline.html  no branding in either — TRUE ONLY SINCE THIS COMMIT.
+ *                        offline.html carried a 2.4rem "YB" mark and the shop's
+ *                        green, on a deployment whose premise is that a stranger
+ *                        learns nothing. The claim was written here, and pinned
+ *                        by a test, without anyone opening the file. Both are
+ *                        corrected; the mark is gone.
  *   manifest.webmanifest a <link rel="manifest"> fetch is no-cors and sends NO
  *                        cookies, so it cannot be answered per-visitor. It is
  *                        blanked by content instead — see src/app/manifest.ts.

@@ -1,4 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  MEMBER_PROOF_COOKIE,
+  TELEGRAM_COOKIE,
+  verifyMemberProof,
+  verifyTelegramToken,
+} from "@/lib/telegram-token";
 import { OPEN_ROUTE_HEADER, isOpenRoute } from "@/lib/open-routes";
 import {
   GATE_STAMP_HEADER,
@@ -67,20 +73,31 @@ const SIGNIN_PATH = "/signin";
 const SESSION_COOKIE = "__Host-ybs_session";
 
 /**
- * TELEGRAM CHANNEL GATE — check ① of two.
+ * BOTH GATE COOKIES ARE VERIFIED HERE, cryptographically.
  *
- * Presence is enough HERE because the token is signed and the API routes that
- * serve real data are not reachable without check ② (the customer session,
- * whose signature the platform verifies on every call). The signature itself is
- * verified where it decides something: `/api/auth/telegram` mints it, and any
- * route that trusts it must call verifyTelegramToken.
+ * They used to be checked for PRESENCE, justified by a claim written into this
+ * file three times: "a forged cookie buys the shell of a page whose every data
+ * call then fails — it does not buy them data."
  *
- * Middleware deliberately does NOT verify it, for the reason already written
- * above about the session cookie: that would mean shipping JWT_SECRET into the
- * edge runtime. A forged cookie gets a visitor as far as the phone form — which
- * then refuses them unless they are a real customer of this tenant.
+ * That is true of the customer-scoped routes. It is false of everything
+ * catalogue-shaped — /api/catalog, /api/suggest, /api/delivery-zone, /api/img
+ * and every page — because those run on the STORE API KEY and send no customer
+ * token, so the upstream has nothing to re-check and simply answers. Measured
+ * live on 2026-08-30 with a cookie header of two names and the letter x:
+ * /api/catalog returned 18,972 bytes of catalogue and / returned 203,025 bytes
+ * of storefront with 113 products.
+ *
+ * The stated blocker for verifying here — "that would ship JWT_SECRET into the
+ * edge runtime" — was already void: this file compiles to the NODE runtime
+ * (.next/server/functions-config-manifest.json). It reads process.env for the
+ * flags on every request; the secret was always available.
+ *
+ * The session cookie itself still cannot be verified — it carries the
+ * platform's token, signed with a secret this app does not hold. So sign-in
+ * mints a companion proof over OUR secret (src/lib/session.ts, setMemberProof)
+ * and the gate verifies that. The proof is not the credential; it is this app's
+ * own attestation that it issued a session.
  */
-const TELEGRAM_COOKIE = "__Host-ybs_tg";
 
 function telegramGateEnabled(): boolean {
   return (process.env.TELEGRAM_GATE || "").trim().toLowerCase() === "on";
@@ -95,7 +112,7 @@ function membersOnlyEnabled(): boolean {
   return (process.env.MEMBERS_ONLY || "").trim().toLowerCase() === "on";
 }
 
-export default function proxy(req: NextRequest) {
+export default async function proxy(req: NextRequest) {
   const passed = req.cookies.get(AGE_COOKIE)?.value === "1";
   const { pathname } = req.nextUrl;
 
@@ -128,19 +145,19 @@ export default function proxy(req: NextRequest) {
   //      caller gets 200 and a content-type that lies, and fails somewhere far
   //      away from the cause. A refusal has to look like a refusal, so this
   //      returns 401 JSON.
-  if (pathname.startsWith("/api/")) return apiGate(req, forward);
+  if (pathname.startsWith("/api/")) return await apiGate(req, forward);
 
   // Branded static files — the logo, the app icons, the splash screens, the
   // cannabis brochure. 404 for a signed-out visitor on a members-only shop,
   // untouched everywhere else. Never rewritten: like the API routes and like
   // the Telegram SDK, answering a request for a PNG with the gate's HTML is a
   // lie the browser cannot act on.
-  if (isBrandedAsset(pathname)) return assetGate(req, forward);
+  if (isBrandedAsset(pathname)) return await assetGate(req, forward);
 
   // SIGN-IN FIRST, then age. A members-only shop shows nothing at all to a
   // stranger — not even the age question, which would tell them a shop is here.
   // Once they are in, the age gate is asked of them like any other customer.
-  const members = membersGate(req, forward);
+  const members = await membersGate(req, forward);
   if (members) return members;
 
   if (passed) {
@@ -172,19 +189,40 @@ export default function proxy(req: NextRequest) {
  * A NO-OP when MEMBERS_ONLY is off, so every other storefront behaves as before.
  * That is the whole reason this is a flag in shared code rather than a fork.
  */
-function membersGate(
+/**
+ * BOTH checks, verified. Channel membership is not a purchase history and a
+ * customer is not necessarily in the channel, so neither substitutes for the
+ * other — and neither is satisfied by a cookie merely existing.
+ *
+ * Fails closed on a missing JWT_SECRET: with no secret nothing verifies, so
+ * nobody is admitted. That is the same shape as `telegramEnv()` returning null.
+ */
+async function isAdmitted(req: NextRequest): Promise<boolean> {
+  const secret = (process.env.JWT_SECRET || "").trim();
+  if (!secret) return false;
+
+  if (telegramGateEnabled()) {
+    const tg = await verifyTelegramToken(req.cookies.get(TELEGRAM_COOKIE)?.value, secret);
+    if (!tg) return false;
+  }
+
+  const proof = await verifyMemberProof(req.cookies.get(MEMBER_PROOF_COOKIE)?.value, secret);
+  if (!proof) return false;
+
+  // The proof attests that a session was issued; the session cookie is the
+  // credential the routes actually relay upstream. Both must be here.
+  return !!req.cookies.get(SESSION_COOKIE)?.value;
+}
+
+async function membersGate(
   req: NextRequest,
   forward: { request: { headers: Headers } },
-): NextResponse | null {
+): Promise<NextResponse | null> {
   if (!membersOnlyEnabled()) return null;
 
   const { pathname } = req.nextUrl;
 
-  // BOTH checks, when the Telegram gate is on. Channel membership is not a
-  // purchase history and a customer is not necessarily in the channel, so
-  // neither substitutes for the other.
-  const inChannel = !telegramGateEnabled() || !!req.cookies.get(TELEGRAM_COOKIE)?.value;
-  const signedIn = inChannel && !!req.cookies.get(SESSION_COOKIE)?.value;
+  const signedIn = await isAdmitted(req);
 
   if (signedIn) {
     // Sitting on /signin with a live session is a dead end; send them shopping.
@@ -229,32 +267,29 @@ function membersGate(
  * route behind this one re-checks the session against the platform on the call
  * it actually makes, so a forged cookie gets an empty answer rather than data.
  */
-function assetGate(
+async function assetGate(
   req: NextRequest,
   forward: { request: { headers: Headers } },
-): NextResponse {
+): Promise<NextResponse> {
   if (!membersOnlyEnabled()) return NextResponse.next(forward);
 
-  const inChannel = !telegramGateEnabled() || !!req.cookies.get(TELEGRAM_COOKIE)?.value;
-  if (inChannel && !!req.cookies.get(SESSION_COOKIE)?.value) return NextResponse.next(forward);
+  if (await isAdmitted(req)) return NextResponse.next(forward);
 
   // 404, not 403: "there is nothing here" is the whole message of this
   // deployment to a stranger, and a 403 would confirm there is.
   return new NextResponse(null, { status: 404 });
 }
 
-function apiGate(
+async function apiGate(
   req: NextRequest,
   forward: { request: { headers: Headers } },
-): NextResponse {
+): Promise<NextResponse> {
   if (!membersOnlyEnabled()) return NextResponse.next(forward);
 
   const { pathname } = req.nextUrl;
   if (isApiBootstrapRoute(pathname)) return NextResponse.next(forward);
 
-  const inChannel = !telegramGateEnabled() || !!req.cookies.get(TELEGRAM_COOKIE)?.value;
-  const signedIn = inChannel && !!req.cookies.get(SESSION_COOKIE)?.value;
-  if (signedIn) return NextResponse.next(forward);
+  if (await isAdmitted(req)) return NextResponse.next(forward);
 
   // Same shape as the upstream's own refusal, so a client that already handles
   // an expired session handles this without a second code path.

@@ -226,14 +226,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           crossOrigin="anonymous"
         />
 
-        {!configured ? (
-          <StoreUnavailable storeName={process.env.NEXT_PUBLIC_SITE_NAME} />
-        ) : membersGated ? (
+        {membersGated ? (
+          // THE GATE OUTRANKS EVERY OTHER BRANCH, including "store unavailable".
+          //
+          // StoreUnavailable was written for an open storefront: it renders the
+          // store name and the brand seal. It used to come first, so a
+          // members-only shop with a missing or rotated KAMUI_STORE_API_KEY
+          // served a stranger a neutral <title>Under construction</title> above
+          // a body reading "YB Cannabis Co. — We're temporarily closed." The
+          // head and the body disagreed, and the body won the argument.
+          //
           // SIGN-IN FIRST, before the age gate. A private shop shows a stranger
           // nothing at all — and an age prompt is not nothing: it tells them a
           // cannabis shop is at this address. `children` is discarded, so the
           // page they asked for never runs and never reaches the flight payload.
           <MembersGate telegramGate={TELEGRAM_GATE_ENABLED} />
+        ) : !configured ? (
+          <StoreUnavailable storeName={process.env.NEXT_PUBLIC_SITE_NAME} />
         ) : gated ? (
           // The store is not rendered at all until the visitor answers. This is a
           // server-side decision, so there is no frame in which the catalog is

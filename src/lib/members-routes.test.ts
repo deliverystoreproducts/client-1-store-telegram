@@ -146,9 +146,12 @@ describe("branded assets", () => {
   it.each([
     // The gate itself loads this. Gating it broke the Mini App for everyone.
     "/telegram-web-app.js",
-    // The gate renders in these.
-    "/fonts/inter.woff2",
-    // No branding in either.
+    // The gate renders in these. (Real filenames — the previous value here was
+    // /fonts/inter.woff2, a font this app does not ship.)
+    "/fonts/fraunces-latin-var.woff2",
+    "/fonts/archivo-latin-var.woff2",
+    // No branding in either — offline.html's "YB" mark was removed to make the
+    // second half of that true. This test used to assert it while it was false.
     "/sw.js",
     "/offline.html",
     // Fetched without cookies, so it cannot be gated — blanked by content.

@@ -20,6 +20,12 @@ import { cookies } from "next/headers";
  * — use localhost or a TLS tunnel.
  */
 
+import {
+  MEMBER_PROOF_COOKIE,
+  signMemberProof,
+} from "@/lib/telegram-token";
+import { MEMBERS_ONLY } from "@/lib/site";
+
 const TOKEN_COOKIE = "__Host-ybs_session";
 /** Marks the token as the short-lived verified-phone kind, not a full session. */
 const PENDING_COOKIE = "__Host-ybs_pending";
@@ -59,22 +65,65 @@ export async function readPendingToken(): Promise<string | null> {
   return s && s.kind === "pending" ? s.token : null;
 }
 
+/**
+ * Mint the app-signed proof that we granted this session, beside the token.
+ *
+ * The gate cannot verify the session cookie: it holds the PLATFORM's customer
+ * token, signed with a secret this storefront does not have. So it checked the
+ * cookie for presence, and `cookie: __Host-ybs_session=x` opened the whole shop
+ * — 200, the full catalogue, 203,025 bytes of storefront (see the header of
+ * src/lib/telegram-token.ts for the measurement).
+ *
+ * This proof carries no identity — the token beside it is the credential, and a
+ * second copy of the identity is a second thing that can disagree. It is only
+ * this app saying, over its own signature, "I issued a session here."
+ *
+ * Minted INSIDE the session setters rather than at the call sites, so a new
+ * sign-in path cannot forget it. Only when MEMBERS_ONLY is on: an open
+ * storefront has no gate to satisfy and gets no extra cookie.
+ *
+ * JWT_SECRET is REQUIRED on a members-only shop. Without it nothing can be
+ * minted and nobody gets in — the same fail-closed shape as a half-configured
+ * Telegram gate, and loud in the logs rather than silently open.
+ */
+async function setMemberProof(
+  jar: Awaited<ReturnType<typeof cookies>>,
+  maxAge: number,
+): Promise<void> {
+  if (!MEMBERS_ONLY) return;
+  const secret = (process.env.JWT_SECRET || "").trim();
+  if (!secret) {
+    console.error(
+      "[members] MEMBERS_ONLY is on but JWT_SECRET is unset — no session proof can be minted, so nobody can sign in. Set JWT_SECRET.",
+    );
+    return;
+  }
+  const proof = await signMemberProof(
+    { exp: Math.floor(Date.now() / 1000) + maxAge },
+    secret,
+  );
+  jar.set(MEMBER_PROOF_COOKIE, proof, { ...BASE, maxAge });
+}
+
 export async function setCustomerSession(token: string): Promise<void> {
   const jar = await cookies();
   jar.set(TOKEN_COOKIE, token, { ...BASE, maxAge: SESSION_MAX_AGE });
   jar.set(PENDING_COOKIE, "", { ...BASE, maxAge: 0 });
+  await setMemberProof(jar, SESSION_MAX_AGE);
 }
 
 export async function setPendingSession(token: string): Promise<void> {
   const jar = await cookies();
   jar.set(TOKEN_COOKIE, token, { ...BASE, maxAge: PENDING_MAX_AGE });
   jar.set(PENDING_COOKIE, "1", { ...BASE, maxAge: PENDING_MAX_AGE });
+  await setMemberProof(jar, PENDING_MAX_AGE);
 }
 
 export async function clearSession(): Promise<void> {
   const jar = await cookies();
   jar.set(TOKEN_COOKIE, "", { ...BASE, maxAge: 0 });
   jar.set(PENDING_COOKIE, "", { ...BASE, maxAge: 0 });
+  jar.set(MEMBER_PROOF_COOKIE, "", { ...BASE, maxAge: 0 });
 }
 
 // ─────────────────────────── age gate ───────────────────────────

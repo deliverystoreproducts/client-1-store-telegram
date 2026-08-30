@@ -29,6 +29,17 @@ export const dynamic = "force-dynamic";
 const PER_CLIENT = { limit: 8, windowMs: 10 * 60_000 };
 const PER_PHONE = { limit: 4, windowMs: 10 * 60_000 };
 
+/**
+ * Is this 403 the members-only "that number is not a customer here" refusal, as
+ * opposed to a credential problem on our side? The upstream names it in the
+ * body; UpstreamError carries the parsed body for exactly this.
+ */
+function isNotACustomer(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const err = (body as { error?: unknown }).error;
+  return err === "not_a_customer";
+}
+
 export async function POST(req: Request): Promise<Response> {
   if (!isSameOriginRequest(req)) return fail(403, "forbidden");
 
@@ -116,8 +127,16 @@ export async function POST(req: Request): Promise<Response> {
      * dispatched. Closing that means padding every response to a fixed floor —
      * worth doing if this shop is ever targeted, and noted here so the next
      * person knows it was considered rather than missed.
+     *
+     * MATCH ON THE BODY, NOT THE BARE STATUS. `e.status` is the UPSTREAM HTTP
+     * status, and 403 is also what a key that has lost its `store` scope
+     * returns. Keying on the number alone meant a misconfigured deployment
+     * answered every customer with "a code is on its way", walked them to the
+     * code screen, and sent nothing — silent to the user AND to any HTTP
+     * monitor, on every storefront rather than just this one. The oracle stays
+     * closed; the outage becomes visible again.
      */
-    if (e instanceof UpstreamError && e.status === 403) {
+    if (e instanceof UpstreamError && e.status === 403 && isNotACustomer(e.body)) {
       return json({ status: "code_sent" });
     }
     return failFromUpstream(e, "We couldn't send a code right now. Please try again.");
