@@ -61,7 +61,7 @@ const NAMED_CRAWLERS = [
   // Others that publish a token
   "cohere-ai", "cohere-training-data-crawler", "Diffbot", "ImagesiftBot",
   "Omgilibot", "Omgili", "YouBot", "Timpibot", "AI2Bot", "PanguBot",
-  "Kangaroo Bot", "Webzio-Extended", "Scrapy", "petalbot", "Applebot-Extended",
+  "Kangaroo Bot", "Webzio-Extended", "Scrapy", "petalbot",
   // Search engines that are not Google or Bing
   "Slurp", "DuckDuckBot", "Baiduspider", "YandexBot", "Sogou", "Exabot",
   // SEO / backlink crawlers — these resell the crawl
