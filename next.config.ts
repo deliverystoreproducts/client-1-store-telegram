@@ -49,7 +49,14 @@ const config: NextConfig = {
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "X-Frame-Options", value: "DENY" },
+          // X-Frame-Options is REMOVED, deliberately. It has no allow-list
+          // syntax — DENY or SAMEORIGIN and nothing else — so it cannot express
+          // "Telegram may frame this, nobody else may". CSP frame-ancestors
+          // below can, and supersedes it wherever both are understood. Leaving
+          // DENY here would simply win, and the Mini App would show a blank
+          // panel in Telegram Web and Desktop, which iframe it. iOS/Android use
+          // a native webview and would have worked — the split failure that
+          // gets reported as "broken for some people".
           {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=(), payment=()",
@@ -80,7 +87,12 @@ const config: NextConfig = {
               "connect-src 'self'",
               "manifest-src 'self'",
               "worker-src 'self'",
-              "frame-ancestors 'none'",
+              // Telegram Web and Desktop load a Mini App in an iframe. This is
+              // the narrowest policy that lets them: two exact origins, no
+              // wildcard, everyone else still refused. Without the Telegram
+              // gate deployed this changes nothing — no other origin gains
+              // anything, and the storefront is not framed by anyone else.
+              "frame-ancestors 'self' https://web.telegram.org https://telegram.org",
               "base-uri 'self'",
               "form-action 'self'",
               "object-src 'none'",

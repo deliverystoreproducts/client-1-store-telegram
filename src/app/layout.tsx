@@ -13,6 +13,7 @@ import { isUpstreamConfigured } from "@/lib/kamui/env";
 import { OPEN_ROUTE_HEADER } from "@/lib/open-routes";
 import { MEMBERS_GATE_HEADER } from "@/lib/members-routes";
 import { MembersGate } from "@/components/MembersGate";
+import { TELEGRAM_GATE_ENABLED } from "@/lib/telegram";
 import { hasPassedAgeGate } from "@/lib/session";
 import { getStoreProfile } from "@/lib/store";
 import { LICENSE_PLACEHOLDER, MISSING, SITE_TAGLINE } from "@/lib/site";
@@ -119,6 +120,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     // (banner → #catalogue, pager) animate.
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <body>
+        {/* TELEGRAM MINI APP: the SDK, FIRST, and served from OUR origin.
+            Linked from telegram.org it would be blocked outright by
+            `script-src 'self'` and would break the storefront's rule that the
+            browser makes no third-party requests — a rule /privacy states as
+            fact. Vendored into public/ instead; provenance and hash are in
+            public/TELEGRAM-SDK-PROVENANCE.txt.
+
+            Loaded unconditionally rather than behind the flag: it is inert
+            outside Telegram (it installs window.Telegram and waits), and a
+            conditional script tag in a layout is a hydration mismatch waiting
+            to happen. */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src="/telegram-web-app.js" />
+
         {/* Applies the saved theme before first paint — no flash. */}
         <script
           dangerouslySetInnerHTML={{
@@ -150,7 +165,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           // nothing at all — and an age prompt is not nothing: it tells them a
           // cannabis shop is at this address. `children` is discarded, so the
           // page they asked for never runs and never reaches the flight payload.
-          <MembersGate />
+          <MembersGate telegramGate={TELEGRAM_GATE_ENABLED} />
         ) : gated ? (
           // The store is not rendered at all until the visitor answers. This is a
           // server-side decision, so there is no frame in which the catalog is

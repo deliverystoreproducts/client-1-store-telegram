@@ -62,6 +62,26 @@ const SIGNIN_PATH = "/signin";
 const SESSION_COOKIE = "__Host-ybs_session";
 
 /**
+ * TELEGRAM CHANNEL GATE — check ① of two.
+ *
+ * Presence is enough HERE because the token is signed and the API routes that
+ * serve real data are not reachable without check ② (the customer session,
+ * whose signature the platform verifies on every call). The signature itself is
+ * verified where it decides something: `/api/auth/telegram` mints it, and any
+ * route that trusts it must call verifyTelegramToken.
+ *
+ * Middleware deliberately does NOT verify it, for the reason already written
+ * above about the session cookie: that would mean shipping JWT_SECRET into the
+ * edge runtime. A forged cookie gets a visitor as far as the phone form — which
+ * then refuses them unless they are a real customer of this tenant.
+ */
+const TELEGRAM_COOKIE = "__Host-ybs_tg";
+
+function telegramGateEnabled(): boolean {
+  return (process.env.TELEGRAM_GATE || "").trim().toLowerCase() === "on";
+}
+
+/**
  * Reachable without a session when MEMBERS_ONLY is on.
  *
  * Deliberately tiny. /signin is the gate itself; the legal notices are open for
@@ -134,8 +154,13 @@ function membersGate(
 ): NextResponse | null {
   if (!membersOnlyEnabled()) return null;
 
-  const signedIn = !!req.cookies.get(SESSION_COOKIE)?.value;
   const { pathname } = req.nextUrl;
+
+  // BOTH checks, when the Telegram gate is on. Channel membership is not a
+  // purchase history and a customer is not necessarily in the channel, so
+  // neither substitutes for the other.
+  const inChannel = !telegramGateEnabled() || !!req.cookies.get(TELEGRAM_COOKIE)?.value;
+  const signedIn = inChannel && !!req.cookies.get(SESSION_COOKIE)?.value;
 
   if (signedIn) {
     // Sitting on /signin with a live session is a dead end; send them shopping.

@@ -1,0 +1,20 @@
+telegram-web-app.js — vendored, not linked.
+
+Source:  https://telegram.org/js/telegram-web-app.js
+Fetched: 2026-08-29
+SHA-256: 3549138a7934039fe7dfd1291a4ee739bd2b705a614308053a8b08a87d85c451
+Size:    116510 bytes
+
+WHY VENDORED RATHER THAN LINKED. This storefront's defining rule is that the
+browser makes no third-party requests — enforced by `script-src 'self'` in the
+CSP and asserted as fact in /privacy. A <script src="https://telegram.org/…">
+would be blocked by the policy AND would make the privacy page untrue. Serving
+it from our own origin keeps both.
+
+INSPECTED BEFORE COMMITTING: it issues no fetch/XHR/WebSocket of its own. The
+only URLs in the file are documentation links and the w3.org SVG namespaces. It
+talks to the Telegram host through postMessage / TelegramWebviewProxy, which is
+the host bridge, not the network.
+
+TO UPDATE: re-fetch, re-inspect for network calls, record the new hash here.
+Telegram versions this API and changes are rare.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiPost, ClientApiError } from "@/lib/client-api";
 import { formatPhone } from "@/lib/phone";
@@ -27,15 +27,84 @@ import { formatPhone } from "@/lib/phone";
  * emptier: this form collects a phone number, so it is a point of collection,
  * and B&P § 22575 wants the policy conspicuously posted.
  */
-export function MembersGate() {
+/**
+ * The Telegram handle the vendored SDK installs. Only the two fields this gate
+ * uses are typed — `initData` and `expand`. A fuller surface would invite code
+ * that depends on it, and every one of those calls is a no-op outside Telegram.
+ */
+declare global {
+  interface Window {
+    Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } };
+  }
+}
+
+export function MembersGate({ telegramGate }: { telegramGate: boolean }) {
   const router = useRouter();
-  const [step, setStep] = useState<"phone" | "code">("phone");
+  /**
+   * `checking` and `blocked` exist only when the Telegram gate is on.
+   *
+   * `blocked` is what makes the shop channel-only: no phone form is rendered at
+   * all, so someone who opened the URL in a normal browser — or who left the
+   * channel — has nothing to submit. Hiding the form is the point; a disabled
+   * one would still tell them what the shop wants.
+   */
+  const [step, setStep] = useState<"checking" | "blocked" | "phone" | "code">(
+    telegramGate ? "checking" : "phone",
+  );
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const digits = phone.replace(/\D/g, "");
+
+  /**
+   * boot() — check ①.
+   *
+   * `initData` lives in the URL hash, which never reaches the server, so this
+   * cannot be done in middleware and the first paint is always a blank shell.
+   * That is inherent to the Mini App design, not a shortcut.
+   *
+   * Runs once. Opened outside Telegram there is no `initData` and the visitor is
+   * blocked without a request being made — no point asking the server whether a
+   * payload we do not have is valid.
+   */
+  useEffect(() => {
+    if (!telegramGate) return;
+    let stop = false;
+
+    (async () => {
+      const wa = window.Telegram?.WebApp;
+      // Ask Telegram for the full sheet: a Mini App opens at half height and
+      // the customer would otherwise have to drag it up to reach the button.
+      try {
+        wa?.ready?.();
+        wa?.expand?.();
+      } catch {
+        /* not inside Telegram — the block below is the answer */
+      }
+
+      const initData = wa?.initData ?? "";
+      if (!initData) {
+        if (!stop) setStep("blocked");
+        return;
+      }
+
+      try {
+        await apiPost("/api/auth/telegram", { initData });
+        if (!stop) setStep("phone");
+      } catch {
+        // Every refusal is the same refusal by design — not a member, stale
+        // payload, forged signature, Telegram unreachable. Distinguishing them
+        // for the visitor would only help someone probing.
+        if (!stop) setStep("blocked");
+      }
+    })();
+
+    return () => {
+      stop = true;
+    };
+  }, [telegramGate]);
 
   async function sendCode(e: React.FormEvent) {
     e.preventDefault();
@@ -83,7 +152,16 @@ export function MembersGate() {
           </p>
         ) : null}
 
-        {step === "phone" ? (
+        {step === "checking" ? (
+          <p className="mgate-note" role="status">
+            Checking your access…
+          </p>
+        ) : step === "blocked" ? (
+          <p className="mgate-note" role="status">
+            This store is open to channel members only. Open it from the channel
+            to continue.
+          </p>
+        ) : step === "phone" ? (
           <form onSubmit={sendCode}>
             <p className="mgate-note">
               Enter your mobile number and we&apos;ll text you a code.
