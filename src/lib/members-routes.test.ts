@@ -165,3 +165,36 @@ describe("branded assets", () => {
     expect(isBrandedAsset("/iconsets")).toBe(false);
   });
 });
+
+
+/**
+ * A pending session is one check passed, not two.
+ *
+ * `setPendingSession` used to mint a member proof, so a visitor who proved a
+ * phone but was NOT a customer held every cookie the gate asks for. Check ② was
+ * then enforced only by the platform refusing to send the code — across a repo
+ * boundary, with nothing asserting it in this app. These pin the local
+ * assertion so a platform rollback cannot silently open the shop.
+ */
+describe("a pending session is not admission", () => {
+  it("session.ts clears the member proof rather than minting one", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("src/lib/session.ts", "utf8"),
+    );
+    const fn = src.slice(src.indexOf("export async function setPendingSession"));
+    const body = fn.slice(0, fn.indexOf("\n}"));
+    expect(body).toContain("MEMBER_PROOF_COOKIE");
+    expect(body).toContain("maxAge: 0");
+    expect(body).not.toContain("setMemberProof");
+  });
+
+  it("the gate refuses a request carrying the pending cookie", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("src/proxy.ts", "utf8"),
+    );
+    const fn = src.slice(src.indexOf("async function isAdmitted"));
+    const body = fn.slice(0, fn.indexOf("\n}"));
+    expect(body).toContain("PENDING_COOKIE");
+    expect(body).toContain("return false");
+  });
+});

@@ -112,11 +112,29 @@ export async function setCustomerSession(token: string): Promise<void> {
   await setMemberProof(jar, SESSION_MAX_AGE);
 }
 
+/**
+ * A PENDING session gets NO member proof. It is not admission.
+ *
+ * This token says "someone proved they control this phone". It does NOT say
+ * "this phone is a customer here" — that is check ②, and a pending session is
+ * precisely the state of having passed one check and not the other.
+ *
+ * It used to mint a proof, which meant a verified-phone-but-not-a-customer
+ * visitor held every cookie `isAdmitted()` asks for and was let in. Check ② was
+ * then enforced ENTIRELY by the platform's willingness to refuse the SMS —
+ * across a repo boundary, with nothing asserting it locally. Point this
+ * storefront at a deployment without that refusal and the shop opens to any
+ * channel member with any phone, silently.
+ *
+ * The token is still set, because the register lane needs it on an OPEN
+ * storefront. On a members-only shop that lane is gated anyway and this state
+ * should never occur — and if it does, it now admits nobody.
+ */
 export async function setPendingSession(token: string): Promise<void> {
   const jar = await cookies();
   jar.set(TOKEN_COOKIE, token, { ...BASE, maxAge: PENDING_MAX_AGE });
   jar.set(PENDING_COOKIE, "1", { ...BASE, maxAge: PENDING_MAX_AGE });
-  await setMemberProof(jar, PENDING_MAX_AGE);
+  jar.set(MEMBER_PROOF_COOKIE, "", { ...BASE, maxAge: 0 });
 }
 
 export async function clearSession(): Promise<void> {

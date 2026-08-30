@@ -73,6 +73,9 @@ const SIGNIN_PATH = "/signin";
 
 const SESSION_COOKIE = "__Host-ybs_session";
 
+/** Mirrors PENDING_COOKIE in src/lib/session.ts — that module is server-only. */
+const PENDING_COOKIE = "__Host-ybs_pending";
+
 /**
  * BOTH GATE COOKIES ARE VERIFIED HERE, cryptographically.
  *
@@ -228,6 +231,12 @@ async function isAdmitted(req: NextRequest): Promise<boolean> {
 
   const proof = await verifyMemberProof(req.cookies.get(MEMBER_PROOF_COOKIE)?.value, secret);
   if (!proof) return false;
+
+  // A PENDING session is a phone that was verified, not a customer that exists.
+  // src/lib/session.ts no longer mints a proof for one, so this is belt and
+  // braces — but it is the assertion that makes check ② true HERE rather than
+  // only in the platform that answers send-code.
+  if (req.cookies.get(PENDING_COOKIE)?.value) return false;
 
   // The proof attests that a session was issued; the session cookie is the
   // credential the routes actually relay upstream. Both must be here.
