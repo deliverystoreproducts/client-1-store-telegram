@@ -195,8 +195,19 @@ export const config = {
    *     browser/worker without a person navigating; rewriting any of them to
    *     the gate's HTML breaks install (wrong MIME) while gating nothing —
    *     none of them carry catalogue data.
+   *   telegram-web-app.js — the vendored Mini App SDK, and it was MISSED when
+   *     the Telegram gate shipped. The gate rewrote it to /signin, so the
+   *     browser received `content-type: text/html` for a .js URL, `nosniff`
+   *     correctly refused to execute it, `window.Telegram` never existed, and
+   *     boot() concluded there was no initData. The result: the gate blocked
+   *     everyone INCLUDING real channel members, and looked identical whether
+   *     opened from Telegram or a browser — so it read as "the check is too
+   *     strict" rather than "the SDK is missing".
+   *
+   *     ANY new static asset must be added here. The failure is silent: no
+   *     error, no 404, just a file that quietly is not what it says it is.
    */
   matcher: [
-    "/((?!api|_next/static|_next/image|fonts|favicon.ico|icon.svg|robots.txt|manifest.webmanifest|sw.js|offline.html|icons/|splash/|apple-icon.png|dcc-safer-use-brochure.pdf).*)",
+    "/((?!api|_next/static|_next/image|fonts|favicon.ico|icon.svg|robots.txt|manifest.webmanifest|sw.js|telegram-web-app.js|offline.html|icons/|splash/|apple-icon.png|dcc-safer-use-brochure.pdf).*)",
   ],
 };
