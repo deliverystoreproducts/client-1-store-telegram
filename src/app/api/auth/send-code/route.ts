@@ -7,6 +7,9 @@ import { normalizePhoneInput } from "@/lib/phone";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
 import { setCustomerSession, setPendingSession } from "@/lib/session";
 import { MEMBERS_ONLY } from "@/lib/site";
+import { cookies } from "next/headers";
+import { TELEGRAM_GATE_ENABLED, telegramEnv } from "@/lib/telegram";
+import { TELEGRAM_COOKIE, verifyTelegramToken } from "@/lib/telegram-token";
 
 /**
  * POST /api/auth/send-code — start phone sign-in.
@@ -33,6 +36,34 @@ export async function POST(req: Request): Promise<Response> {
   const phone = normalizePhoneInput(body?.phone);
   if (!phone) {
     return fail(400, "invalid_phone", { message: "Enter a valid mobile number." });
+  }
+
+  /**
+   * THE SMS ITSELF REQUIRES THE CHANNEL CHECK — not just access to the site.
+   *
+   * The proxy already refuses a signed-out visitor the shop, so a forged or
+   * absent Telegram cookie could never reach the catalogue. But this route
+   * SPENDS MONEY on the tenant's behalf and is reachable directly: without this
+   * check, anyone outside Telegram could POST a customer's number and make the
+   * shop text them. They would gain no access — the gate needs both cookies —
+   * but the owner's requirement is that a code is sent "only and only if" the
+   * person came through Telegram, and an SMS they did not ask for is exactly
+   * the harm.
+   *
+   * VERIFIED, not merely present. Middleware checks this cookie for presence
+   * because a forgery buys nothing there. Here it decides whether to send, so
+   * the signature is checked — otherwise the whole thing is a cookie anyone can
+   * type.
+   */
+  if (TELEGRAM_GATE_ENABLED) {
+    const env = telegramEnv();
+    const cookie = (await cookies()).get(TELEGRAM_COOKIE)?.value;
+    const claim = env ? await verifyTelegramToken(cookie, env.jwtSecret) : null;
+    if (!claim) {
+      return fail(403, "not_in_channel", {
+        message: "Open this store from the channel to continue.",
+      });
+    }
   }
 
   const byClient = rateLimit(clientKey(req, "send-code"), PER_CLIENT.limit, PER_CLIENT.windowMs);
