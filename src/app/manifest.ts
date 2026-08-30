@@ -15,6 +15,13 @@ import { SITE_TAGLINE } from "@/lib/site";
 // So the identity is dropped for the whole deployment when MEMBERS_ONLY is on.
 // The cost is a home-screen install that shows no branding — irrelevant here,
 // because the shop is entered from a Telegram Mini App and nobody installs it.
+// Evaluated per request. Without this Next PRERENDERS the manifest at build
+// time, and the deployed file then carries whatever the BUILD environment knew
+// — which on Railway is not necessarily the runtime variables. Observed live:
+// the page said "Under construction" while /manifest.webmanifest still served
+// {"name":"Big Flowers Co.","description":"Same-day cannabis delivery..."}.
+export const dynamic = "force-dynamic";
+
 export default function manifest(): MetadataRoute.Manifest {
   if ((process.env.MEMBERS_ONLY || "").trim().toLowerCase() === "on") {
     return {

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { OPEN_ROUTE_HEADER, isOpenRoute } from "@/lib/open-routes";
-import { MEMBERS_GATE_HEADER, isApiBootstrapRoute } from "@/lib/members-routes";
+import { MEMBERS_GATE_HEADER, isApiBootstrapRoute, isBrandedAsset } from "@/lib/members-routes";
 
 /**
  * THE AGE GATE, ENFORCED BEFORE ANY PAGE CODE RUNS.
@@ -121,6 +121,13 @@ export default function proxy(req: NextRequest) {
   //      returns 401 JSON.
   if (pathname.startsWith("/api/")) return apiGate(req, forward);
 
+  // Branded static files — the logo, the app icons, the splash screens, the
+  // cannabis brochure. 404 for a signed-out visitor on a members-only shop,
+  // untouched everywhere else. Never rewritten: like the API routes and like
+  // the Telegram SDK, answering a request for a PNG with the gate's HTML is a
+  // lie the browser cannot act on.
+  if (isBrandedAsset(pathname)) return assetGate(req, forward);
+
   // SIGN-IN FIRST, then age. A members-only shop shows nothing at all to a
   // stranger — not even the age question, which would tell them a shop is here.
   // Once they are in, the age gate is asked of them like any other customer.
@@ -213,6 +220,20 @@ function membersGate(
  * route behind this one re-checks the session against the platform on the call
  * it actually makes, so a forged cookie gets an empty answer rather than data.
  */
+function assetGate(
+  req: NextRequest,
+  forward: { request: { headers: Headers } },
+): NextResponse {
+  if (!membersOnlyEnabled()) return NextResponse.next(forward);
+
+  const inChannel = !telegramGateEnabled() || !!req.cookies.get(TELEGRAM_COOKIE)?.value;
+  if (inChannel && !!req.cookies.get(SESSION_COOKIE)?.value) return NextResponse.next(forward);
+
+  // 404, not 403: "there is nothing here" is the whole message of this
+  // deployment to a stranger, and a 403 would confirm there is.
+  return new NextResponse(null, { status: 404 });
+}
+
 function apiGate(
   req: NextRequest,
   forward: { request: { headers: Headers } },
@@ -267,6 +288,16 @@ export const config = {
     // legible: this one says "every API route", that one says "every page
     // except the static assets".
     "/api/:path*",
+    // The branded static files. They are excluded by the negative lookahead
+    // below (correctly — they must never be rewritten to the gate's HTML), so
+    // they need their own entries to be SEEN by assetGate at all.
+    "/icon.svg",
+    "/apple-icon.png",
+    "/favicon.ico",
+    "/dcc-safer-use-brochure.pdf",
+    "/TELEGRAM-SDK-PROVENANCE.txt",
+    "/icons/:path*",
+    "/splash/:path*",
     "/((?!api|_next/static|_next/image|fonts|favicon.ico|icon.svg|robots.txt|manifest.webmanifest|sw.js|telegram-web-app.js|offline.html|icons/|splash/|apple-icon.png|dcc-safer-use-brochure.pdf).*)",
   ],
 };

@@ -89,3 +89,43 @@ export function isApiBootstrapRoute(pathname: string): boolean {
   const p = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
   return (API_BOOTSTRAP_ROUTES as readonly string[]).includes(p);
 }
+
+/**
+ * Static files that carry the shop's identity, and are therefore refused to a
+ * signed-out visitor on a members-only deployment.
+ *
+ * These were all reachable, and the first two were LINKED from the gate itself:
+ * `<link rel="icon">` put the shop's logo in the browser tab, directly beside
+ * the words "Under construction". The page had been emptied and the tab still
+ * had the mark in it.
+ *
+ * /dcc-safer-use-brochure.pdf is the loudest of them — a state cannabis
+ * safer-use brochure, downloadable by anyone who found the domain. It is
+ * required at checkout (B&P § 26070.3(b)), which a signed-out visitor cannot
+ * reach, so gating it costs nothing.
+ *
+ * DELIBERATELY NOT HERE, and each for a reason that bites if forgotten:
+ *   telegram-web-app.js  the gate itself needs it — gating it is how the Mini
+ *                        App blocked everyone last week
+ *   /fonts/*             the gate renders in them
+ *   sw.js, offline.html  no branding in either (offline.html is titled
+ *                        "Offline" and names nothing)
+ *   manifest.webmanifest a <link rel="manifest"> fetch is no-cors and sends NO
+ *                        cookies, so it cannot be answered per-visitor. It is
+ *                        blanked by content instead — see src/app/manifest.ts.
+ */
+const BRANDED_ASSET_PREFIXES = ["/icons/", "/splash/"];
+const BRANDED_ASSET_FILES = [
+  "/icon.svg",
+  "/apple-icon.png",
+  "/favicon.ico",
+  "/dcc-safer-use-brochure.pdf",
+  "/TELEGRAM-SDK-PROVENANCE.txt",
+];
+
+export function isBrandedAsset(pathname: string): boolean {
+  return (
+    BRANDED_ASSET_FILES.includes(pathname) ||
+    BRANDED_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  );
+}

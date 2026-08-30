@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   API_BOOTSTRAP_ROUTES,
+  isBrandedAsset,
   MEMBER_OPEN_ROUTES,
   isApiBootstrapRoute,
   isMemberOpenRoute,
@@ -115,5 +116,49 @@ describe("API bootstrap allow-list", () => {
   it("does not open an API route by prefix", () => {
     expect(isApiBootstrapRoute("/api/health/secrets")).toBe(false);
     expect(isApiBootstrapRoute("/api/auth/telegram-admin")).toBe(false);
+  });
+});
+
+/**
+ * The branded-asset deny-list. `<link rel="icon">` put the shop's logo in the
+ * browser tab beside the words "Under construction" — the page was emptied and
+ * the tab still carried the mark.
+ *
+ * The three exclusions are the dangerous half of this list. Gating
+ * telegram-web-app.js is exactly how the Mini App blocked every member last
+ * week, and the fonts and the manifest have their own reasons — see the comment
+ * on BRANDED_ASSET_FILES.
+ */
+describe("branded assets", () => {
+  it.each([
+    "/icon.svg",
+    "/apple-icon.png",
+    "/favicon.ico",
+    "/dcc-safer-use-brochure.pdf",
+    "/TELEGRAM-SDK-PROVENANCE.txt",
+    "/icons/icon-192.png",
+    "/icons/maskable-512.png",
+    "/splash/430x932@3x-dark.png",
+  ])("refuses %s to a signed-out visitor", (path) => {
+    expect(isBrandedAsset(path)).toBe(true);
+  });
+
+  it.each([
+    // The gate itself loads this. Gating it broke the Mini App for everyone.
+    "/telegram-web-app.js",
+    // The gate renders in these.
+    "/fonts/inter.woff2",
+    // No branding in either.
+    "/sw.js",
+    "/offline.html",
+    // Fetched without cookies, so it cannot be gated — blanked by content.
+    "/manifest.webmanifest",
+  ])("never gates %s", (path) => {
+    expect(isBrandedAsset(path)).toBe(false);
+  });
+
+  it("does not gate a page that merely starts like an asset path", () => {
+    expect(isBrandedAsset("/icon.svg.html")).toBe(false);
+    expect(isBrandedAsset("/iconsets")).toBe(false);
   });
 });

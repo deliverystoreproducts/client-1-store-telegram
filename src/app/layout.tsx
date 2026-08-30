@@ -43,6 +43,9 @@ export async function generateMetadata(): Promise<Metadata> {
   if ((await headers()).get(MEMBERS_GATE_HEADER) === "1") {
     return {
       title: "Under construction",
+      // Drop the file-convention icon links. The files are 404'd by the proxy
+      // too, but not emitting them is better than emitting a link to nothing.
+      icons: { icon: [], apple: [], shortcut: [] },
       // No description, no appleWebApp — that block names the store and pulls in
       // a dozen branded splash images.
       robots: { index: false, follow: false },
