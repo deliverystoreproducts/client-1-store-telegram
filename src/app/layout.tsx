@@ -19,7 +19,39 @@ import { getStoreProfile } from "@/lib/store";
 import { LICENSE_PLACEHOLDER, MISSING, SITE_TAGLINE } from "@/lib/site";
 import { DELIVERY_WINDOW_LABEL } from "@/lib/hours";
 
-export const metadata: Metadata = {
+/**
+ * A members-gated response must not carry the shop's identity in its HEAD.
+ *
+ * The gate screen itself was verified empty — no links, no catalogue, no policy
+ * text — while the document around it still announced everything:
+ *
+ *     <title>Sign in · Big Flowers Co.</title>
+ *     <meta name="description" content="Same-day cannabis delivery, paid at the door.">
+ *     <meta name="apple-mobile-web-app-title" content="YB">
+ *     <link rel="manifest" href="/manifest.webmanifest">
+ *
+ * The title is the browser tab. It was the loudest leak on the page and the one
+ * nobody looks at, because checks grep the body.
+ *
+ * So this is `generateMetadata`, not a static object: it reads the same header
+ * the layout branches on and returns a document with no identity in it. The
+ * manifest is handled separately in src/app/manifest.ts — a manifest link is
+ * injected by file convention and its fetch does not carry cookies, so it
+ * cannot be answered per-visitor.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  if ((await headers()).get(MEMBERS_GATE_HEADER) === "1") {
+    return {
+      title: "Under construction",
+      // No description, no appleWebApp — that block names the store and pulls in
+      // a dozen branded splash images.
+      robots: { index: false, follow: false },
+    };
+  }
+  return SITE_METADATA;
+}
+
+const SITE_METADATA: Metadata = {
   title: {
     default: process.env.NEXT_PUBLIC_SITE_NAME || "YB Cannabis Co.",
     template: `%s · ${process.env.NEXT_PUBLIC_SITE_NAME || "YB Cannabis Co."}`,
@@ -58,14 +90,22 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6fbf2" },
-    { media: "(prefers-color-scheme: dark)", color: "#120b1e" },
-  ],
-  width: "device-width",
-  initialScale: 1,
-};
+export async function generateViewport(): Promise<Viewport> {
+  // The gate is plain white in both schemes, so the browser chrome is too —
+  // the shop's green would otherwise tint the address bar of a page that is
+  // meant to look like nothing.
+  if ((await headers()).get(MEMBERS_GATE_HEADER) === "1") {
+    return { themeColor: "#ffffff", width: "device-width", initialScale: 1 };
+  }
+  return {
+    themeColor: [
+      { media: "(prefers-color-scheme: light)", color: "#f6fbf2" },
+      { media: "(prefers-color-scheme: dark)", color: "#120b1e" },
+    ],
+    width: "device-width",
+    initialScale: 1,
+  };
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Fail closed, and fail early. With no credentials there is no catalog, no

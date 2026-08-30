@@ -54,6 +54,9 @@ export function MembersGate({ telegramGate }: { telegramGate: boolean }) {
    * all, so someone who opened the URL in a normal browser — or who left the
    * channel — has nothing to submit. Hiding the form is the point; a disabled
    * one would still tell them what the shop wants.
+   *
+   * `checking` renders NOTHING and `blocked` renders four words. Between them
+   * they are everything a non-member is ever served.
    */
   const [step, setStep] = useState<"checking" | "blocked" | "phone" | "code">(
     telegramGate ? "checking" : "phone",
@@ -160,13 +163,26 @@ export function MembersGate({ telegramGate }: { telegramGate: boolean }) {
         ) : null}
 
         {step === "checking" ? (
-          <p className="mgate-note" role="status">
-            Checking your access…
-          </p>
+          // NOTHING, deliberately. This is the server-rendered first paint, and
+          // it is what a browser with JavaScript disabled keeps forever. Any
+          // placeholder here — even "checking your access" — is a sentence a
+          // stranger gets to read, and it says a gate exists and something is
+          // behind it. A blank white screen says nothing at all, and the real
+          // state arrives a few hundred milliseconds later.
+          null
         ) : step === "blocked" ? (
+          // Everyone who did not arrive through the Mini App ends here: opened
+          // the URL directly, left the channel, forged a payload, or Telegram
+          // was unreachable. They are told the site is unfinished and nothing
+          // else — no store name, no product, no channel, no hint that a gate
+          // was passed or failed, and nothing to submit.
+          //
+          // "Under construction" is not a cover story that has to hold up
+          // forever; it is the smallest true-sounding thing that reveals
+          // nothing. Do not enrich it. Every word added here is a word a
+          // stranger reads.
           <p className="mgate-note" role="status">
-            This store is open to channel members only. Open it from the channel
-            to continue.
+            Under construction.
           </p>
         ) : step === "phone" ? (
           <form onSubmit={sendCode}>
