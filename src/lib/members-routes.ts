@@ -22,6 +22,33 @@
 export const MEMBERS_GATE_HEADER = "x-ybs-members-gate";
 
 /**
+ * Proof that the proxy RAN on this request. Stamped on every request it
+ * forwards; any inbound copy is deleted first, exactly like the other two.
+ *
+ * Why it exists. The gate's headers said what the proxy DECIDED, and the layout
+ * read absence-of-header as "no gate fired, render the shop". That is
+ * fail-OPEN, and the matcher below has an exclusion list, so there is a whole
+ * class of paths where the proxy never runs and therefore never stamps —
+ * indistinguishable, to the layout, from "the proxy ran and let you through".
+ *
+ * It was not theoretical. `GET /robots.txt` — no cookies, no attacker
+ * cleverness, every crawler sends it — matched the `robots.txt` exclusion, so
+ * the proxy skipped it; nothing serves that path, so Next rendered its 404
+ * THROUGH the root layout; and the layout, seeing no gate header, served the
+ * full branded age gate: 22,180 bytes naming the store, the tagline, "Licensed
+ * California cannabis retailer" and an internal "Licence number NOT SET"
+ * admin hint. Adding `x-ybs-open-route: 1` — a header the proxy strips, but
+ * only on paths it runs on — turned that into 27,590 bytes of complete
+ * shopfront: promo bar, header, full nav, hours, footer.
+ *
+ * With this stamp the layout can tell the two apart, and an unstamped request
+ * on a members-only shop renders the gate instead of the shop. The exclusion
+ * list stops being a security boundary and goes back to being what it was
+ * meant to be: a list of files that must not be rewritten to HTML.
+ */
+export const GATE_STAMP_HEADER = "x-ybs-gate-ran";
+
+/**
  * NO page is reachable without a session. Every path a signed-out visitor asks
  * for answers with the same white sign-in screen.
  *

@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { OPEN_ROUTE_HEADER, isOpenRoute } from "@/lib/open-routes";
-import { MEMBERS_GATE_HEADER, isApiBootstrapRoute, isBrandedAsset } from "@/lib/members-routes";
+import {
+  GATE_STAMP_HEADER,
+  MEMBERS_GATE_HEADER,
+  isApiBootstrapRoute,
+  isBrandedAsset,
+} from "@/lib/members-routes";
 
 /**
  * THE AGE GATE, ENFORCED BEFORE ANY PAGE CODE RUNS.
@@ -102,6 +107,10 @@ export default function proxy(req: NextRequest) {
   const headers = new Headers(req.headers);
   headers.delete(OPEN_ROUTE_HEADER);
   headers.delete(MEMBERS_GATE_HEADER);
+  headers.delete(GATE_STAMP_HEADER);
+  // Set AFTER the deletes, so the value downstream is always ours. Its absence
+  // downstream means one thing only: this file did not run.
+  headers.set(GATE_STAMP_HEADER, "1");
   const open = isOpenRoute(pathname);
   if (open) headers.set(OPEN_ROUTE_HEADER, "1");
   const forward = { request: { headers } };
@@ -298,6 +307,12 @@ export const config = {
     "/TELEGRAM-SDK-PROVENANCE.txt",
     "/icons/:path*",
     "/splash/:path*",
-    "/((?!api|_next/static|_next/image|fonts|favicon.ico|icon.svg|robots.txt|manifest.webmanifest|sw.js|telegram-web-app.js|offline.html|icons/|splash/|apple-icon.png|dcc-safer-use-brochure.pdf).*)",
+    // Each token must be followed by "/" or end-of-path. Without the
+    // `(?:/|$)` these were unanchored PREFIXES: `robots.txt` also excluded
+    // `robots.txtZZ`, `api` excluded `apiZZ`, `sw.js` excluded `sw.jsZZ`. Any
+    // suffixed variant skipped the proxy, and Next rendered its 404 through the
+    // root layout — the full branded shop, to anyone. The dots are escaped for
+    // the same reason: `favicon.ico` matched `faviconXico` too.
+    "/((?!(?:api|_next/static|_next/image|fonts|favicon\\.ico|icon\\.svg|robots\\.txt|manifest\\.webmanifest|sw\\.js|telegram-web-app\\.js|offline\\.html|icons|splash|apple-icon\\.png|dcc-safer-use-brochure\\.pdf)(?:/|$)).*)",
   ],
 };

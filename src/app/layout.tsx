@@ -11,12 +11,12 @@ import { StoreUnavailable } from "@/components/StoreUnavailable";
 import { SwRegister } from "@/components/SwRegister";
 import { isUpstreamConfigured } from "@/lib/kamui/env";
 import { OPEN_ROUTE_HEADER } from "@/lib/open-routes";
-import { MEMBERS_GATE_HEADER } from "@/lib/members-routes";
+import { GATE_STAMP_HEADER, MEMBERS_GATE_HEADER } from "@/lib/members-routes";
 import { MembersGate } from "@/components/MembersGate";
 import { TELEGRAM_GATE_ENABLED } from "@/lib/telegram";
 import { hasPassedAgeGate } from "@/lib/session";
 import { getStoreProfile } from "@/lib/store";
-import { LICENSE_PLACEHOLDER, MISSING, SITE_TAGLINE } from "@/lib/site";
+import { LICENSE_PLACEHOLDER, MEMBERS_ONLY, MISSING, SITE_TAGLINE } from "@/lib/site";
 import { DELIVERY_WINDOW_LABEL } from "@/lib/hours";
 
 /**
@@ -39,8 +39,27 @@ import { DELIVERY_WINDOW_LABEL } from "@/lib/hours";
  * injected by file convention and its fetch does not carry cookies, so it
  * cannot be answered per-visitor.
  */
+/**
+ * Is this response gated? Fail CLOSED on an unstamped request.
+ *
+ * `GATE_STAMP_HEADER` is proof the proxy ran. A members-only shop treats its
+ * absence as "the proxy did not see this path" and gates anyway — because the
+ * proxy has an exclusion list, and every path on it reached the layout looking
+ * exactly like an allowed one. /robots.txt served the whole branded shop that
+ * way. Absence of a decision is not a decision to let someone in.
+ *
+ * On an open storefront (MEMBERS_ONLY off) this is always false, so YB and
+ * client-1-store are untouched.
+ */
+async function isMembersGated(): Promise<boolean> {
+  if (!MEMBERS_ONLY) return false;
+  const h = await headers();
+  if (h.get(GATE_STAMP_HEADER) !== "1") return true;
+  return h.get(MEMBERS_GATE_HEADER) === "1";
+}
+
 export async function generateMetadata(): Promise<Metadata> {
-  if ((await headers()).get(MEMBERS_GATE_HEADER) === "1") {
+  if (await isMembersGated()) {
     return {
       title: "Under construction",
       // Drop the file-convention icon links. The files are 404'd by the proxy
@@ -97,7 +116,7 @@ export async function generateViewport(): Promise<Viewport> {
   // The gate is plain white in both schemes, so the browser chrome is too —
   // the shop's green would otherwise tint the address bar of a page that is
   // meant to look like nothing.
-  if ((await headers()).get(MEMBERS_GATE_HEADER) === "1") {
+  if (await isMembersGated()) {
     return { themeColor: "#ffffff", width: "device-width", initialScale: 1 };
   }
   return {
@@ -145,7 +164,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // all, so the thing layer 1 protects is not in play. The header is stamped by
   // `src/proxy.ts`, which deletes any inbound copy first.
   const reqHeaders = await headers();
-  const openRoute = reqHeaders.get(OPEN_ROUTE_HEADER) === "1";
+  // Trust OPEN_ROUTE_HEADER only when the proxy stamped this request. The proxy
+  // deletes inbound copies — but only on paths it runs on, so on an excluded
+  // path a client could simply SEND `x-ybs-open-route: 1` and the layout
+  // believed it. That is how a forged header turned a 404 into 27,590 bytes of
+  // full shopfront.
+  const gateRan = reqHeaders.get(GATE_STAMP_HEADER) === "1";
+  const openRoute = gateRan && reqHeaders.get(OPEN_ROUTE_HEADER) === "1";
   const gated = !passedGate && !openRoute;
 
   // MEMBERS-ONLY: src/proxy.ts stamps this when it rewrites a signed-out
@@ -153,7 +178,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // layout has no other way to tell "navigated to /signin" from "rewritten
   // here from /product/1", which is why the gate first shipped rendering inside
   // the full shop chrome. The proxy deletes any inbound copy before setting it.
-  const membersGated = reqHeaders.get(MEMBERS_GATE_HEADER) === "1";
+  const membersGated = await isMembersGated();
 
   const year = new Date().getFullYear();
 
